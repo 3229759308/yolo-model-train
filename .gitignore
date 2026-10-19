@@ -1,0 +1,100 @@
+# Python bytecode, environments and tool caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.tox/
+.nox/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.cache/
+
+# Python packaging and test reports
+/build/
+/dist/
+*.egg-info/
+.eggs/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local secrets and credentials; keep example configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+/.aws/
+/.ssh/
+.netrc
+
+# Local datasets, annotations, extracted frames and training outputs
+# Keep YAML dataset definitions in configs/, outside these directories.
+/data/
+/datasets/
+/runs/
+/outputs/
+/weights/
+/checkpoints/
+/artifacts/
+/exports/
+
+# Model weights and exported inference models
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.onnx.data
+*.engine
+*.plan
+*.tflite
+*.torchscript
+*.mlpackage/
+*.mlmodel
+*_openvino_model/
+*_saved_model/
+*_ncnn_model/
+
+# Video sources (including videos accidentally copied outside data/)
+# Image assets, source code and configuration files remain trackable.
+*.webm
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.m4v
+
+# Dataset index caches, experiment tracking and logs
+*.cache
+wandb/
+mlruns/
+mlartifacts/
+lightning_logs/
+.tensorboard/
+events.out.tfevents.*
+*.log
+/Ultralytics/
+/.config/Ultralytics/
+
+# Frontend dependencies and local temporary files
+node_modules/
+/tmp/
+/temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Editor and OS metadata
+.vscode/
+.idea/
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini

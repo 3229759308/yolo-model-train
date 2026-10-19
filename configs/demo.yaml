@@ -1,0 +1,8 @@
+# 快速验证环境用；正式训练时再增加 epochs 和 imgsz。
+epochs: 1
+imgsz: 320
+batch: 2
+workers: 0
+amp: false
+plots: true
+seed: 0

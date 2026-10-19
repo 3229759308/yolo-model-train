@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>视频抽帧 · AutoAim</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<main>
+<header><a class="brand" href="/">AUTOAIM <span>/ TOOLS</span></a><span class="local"><i></i> 本地视频处理</span></header>
+<section class="intro"><div class="eyebrow">DATASET PREPARATION</div><h1>把视频变成<br><span>下一批训练数据。</span></h1><p>选择视频文件夹，设置帧间隔，批量导出原始分辨率图片。</p></section>
+<div class="layout">
+<section class="card settings"><div class="section-title"><h2>抽帧设置</h2><span>01 — CONFIGURE</span></div>
+<form id="form">
+<label for="input">输入文件夹</label><div class="path-row"><input id="input" required placeholder="选择包含视频的文件夹"><button type="button" data-browse="input" class="secondary">浏览</button></div><p class="hint">处理该文件夹内所有同格式视频，不包含子文件夹。</p>
+<div id="video-list" class="videos">正在读取视频…</div>
+<label for="output">输出文件夹</label><div class="path-row"><input id="output" required placeholder="选择或输入输出文件夹路径"><button type="button" data-browse="output" class="secondary">浏览</button></div><p class="hint">所有图片统一保存到这里；可输入新文件夹路径，开始时自动创建。</p>
+<label for="step">抽帧间隔</label><div class="step-row"><span>每隔</span><input id="step" type="number" min="1" step="1" value="30" required><span>帧，取 1 张</span></div><p class="hint" id="step-hint">抽取第 0、30、60、90… 帧；保留原始分辨率。</p>
+<div class="notice">JPG 图片 · 文件名包含视频名和帧号 · 不生成 CSV</div>
+<p id="error" class="error" role="alert"></p><div class="actions"><button id="start" class="primary" type="submit">开始抽帧 <span>↗</span></button><button id="stop" type="button" class="secondary" disabled>停止</button></div>
+</form></section>
+<section class="card task"><div class="section-title"><h2>任务状态</h2><span id="badge" class="badge">等待开始</span></div><div class="metrics"><div><strong id="saved">0</strong><span>已保存图片</span></div><div><strong id="count">0 / 0</strong><span>已完成视频</span></div></div><div class="progress-label"><span id="current">准备好后，开始第一次抽帧</span><b id="percent">0%</b></div><progress id="progress" max="100" value="0"></progress><div class="log-title">运行记录</div><pre id="logs" aria-live="polite">任务运行后，这里会显示处理进度。</pre><p id="result" class="hint"></p></section>
+</div><footer>原始视频保持完整。已有同名抽帧结果时会停止，避免覆盖。</footer>
+</main>
+<dialog id="picker"><div class="section-title"><h2 id="picker-title">选择文件夹</h2><button id="close-picker" class="icon" type="button" aria-label="关闭">×</button></div><div class="path-row"><input id="folder-path" aria-label="当前文件夹"><button id="go" class="secondary" type="button">前往</button></div><div class="folder-top"><button id="up" type="button" class="secondary">↑ 上一级</button><span id="folder-count"></span></div><p id="picker-error" class="error" role="alert"></p><div id="folders"></div><div class="picker-footer"><button id="select-folder" class="primary" type="button">选择当前文件夹</button></div></dialog>
+<script src="/app.js"></script>
+</body></html>
