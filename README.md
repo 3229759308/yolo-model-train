@@ -47,3 +47,19 @@ python src/demo_train.py
 这只是验证训练流程的例程，1 轮和极小数据集的指标不能代表正式模型效果。
 
 数据集说明：https://docs.ultralytics.com/datasets/detect/coco8/
+
+## 装甲板标注工具
+
+`tools/bit-auto-label` 是 Git 子模块，包含其自身的 SAM3 子模块。克隆后初始化：
+
+```bash
+git submodule update --init --recursive
+```
+
+环境版本、系统依赖、权重来源与校验值，以及重建步骤记录在 [标注环境 README](tools/armorlabel_env/README.md)。已配置环境后启动：
+
+```bash
+bash tools/armorlabel_env/start.sh
+```
+
+该工具使用独立 Python 环境，以 PySide6 桌面窗口运行。Git 仅保存源码引用、辅助脚本及配置说明；虚拟环境、下载缓存、模型权重和数据集均不提交。
