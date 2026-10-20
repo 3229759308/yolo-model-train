@@ -1,0 +1,3 @@
+[submodule "tools/bit-auto-label"]
+	path = tools/bit-auto-label
+	url = https://github.com/3229759308/bit-auto-label.git
