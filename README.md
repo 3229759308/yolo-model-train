@@ -27,26 +27,9 @@ git commit -m "Initialize YOLO training workspace"
 
 数据集、权重及训练输出已在 `.gitignore` 中排除。不要将密钥写入代码或配置文件。
 
-## 最小训练例程
+## 视频抽帧
 
-在工作区运行：
-
-```bash
-python src/demo_train.py
-```
-
-首次运行会下载官方 COCO8 数据集及 YOLO11n 预训练权重。例程自动选择 GPU（无 GPU 时使用 CPU），训练 1 轮后保存验证集预测图片。
-
-- 参数：`configs/demo.yaml`
-- 数据集：`datasets/coco8/`
-- 预训练权重：`weights/yolo11n.pt`
-- 训练结果：`runs/demo_train/`，包括 `weights/best.pt`、`results.csv` 和图表
-- 预测图片：`runs/demo_predict/`
-
-重复运行会自动建立带数字后缀的结果目录，具体路径以终端输出为准。
-这只是验证训练流程的例程，1 轮和极小数据集的指标不能代表正式模型效果。
-
-数据集说明：https://docs.ultralytics.com/datasets/detect/coco8/
+网页抽帧与命令行批量抽帧工具位于 `tools/frame_extractor/`。运行方式和参数见 [抽帧工具 README](tools/frame_extractor/README.md)。
 
 ## 装甲板标注工具
 
@@ -63,3 +46,13 @@ bash tools/armorlabel_env/start.sh
 ```
 
 该工具使用独立 Python 环境，以 PySide6 桌面窗口运行。Git 仅保存源码引用、辅助脚本及配置说明；虚拟环境、下载缓存、模型权重和数据集均不提交。
+
+## 自定义检测头标注工具
+
+`tools/armor_labeler` 提供独立颜色、九类装甲板和四个原图像素关键点标注，支持手工编辑；默认加载 `weights/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，输入 `1×3×480×640`、输出 `1×21×6300`：
+
+```bash
+bash tools/armor_labeler/start.sh --images /workspace/data/raw_image/test
+```
+
+默认标签写入图片目录旁的 `<目录名>_labels`，可用 `--labels` 指定。随附配置按真实模型的网络输入坐标还原到原图；预处理和输出坐标可在窗口内切换。配置中的模型路径相对配置文件解析，`--model` 可覆盖。工具默认复用 `bit-auto-label/.venv`；详细操作、模型证据、依赖与导出说明见 [工具 README](tools/armor_labeler/README.md)。

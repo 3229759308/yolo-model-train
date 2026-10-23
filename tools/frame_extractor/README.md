@@ -27,3 +27,26 @@ python tools/frame_extractor/app.py --root /mnt/data --port 7860
 默认仅监听 127.0.0.1。若使用 Docker bridge 网络且需要映射端口，可加 `--host 0.0.0.0` 并映射 7860。页面选择的是 Docker 可访问的文件夹，宿主机目录需先挂载进容器。
 
 目录中的 `app.py` 为后端，`index.html`、`app.js`、`style.css` 为前端。
+
+## 命令行批量抽帧
+
+无需启动网页，直接运行（依赖 OpenCV）：
+
+```bash
+python /workspace/tools/frame_extractor/batch_extract.py
+```
+
+默认递归扫描 `/workspace/data/infantry` 和 `/workspace/data/sentry` 的 AVI，
+抽取第 0、30、60… 帧，以原始分辨率、95 的 JPG 质量保存到 `/workspace/data/raw_image`。
+文件名如 `infantry_bisai_1_f0000030.jpg`、`sentry_bisai_1_f0000030.jpg`，
+包括来源目录、视频名与从 0 开始的原视频帧序号。子目录名也会加入文件名；重名冲突会在处理前报错。
+默认最多同时处理 4 个视频，已有非空图片会跳过，不覆盖；单个视频失败会继续其他视频，最终返回非零退出码。
+部分 AVI 的标称帧数为 0，仍会顺序读取至视频结束。
+
+指定输入、输出及间隔：
+
+```bash
+python /workspace/tools/frame_extractor/batch_extract.py \
+  --input /workspace/data/infantry /workspace/data/sentry \
+  --output /workspace/data/raw_image --step 30 --workers 4 --quality 95
+```

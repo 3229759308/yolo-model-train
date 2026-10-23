@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .venv/
+.venv-*/
 venv/
 env/
 .tox/
@@ -22,6 +23,18 @@ env/
 .coverage.*
 htmlcov/
 coverage.xml
+
+# Native compiler outputs
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.pdb
 
 # Local secrets and credentials; keep example configuration
 .env
@@ -89,6 +102,7 @@ node_modules/
 *.temp
 *.swp
 *.swo
+*.bak
 *~
 
 # Editor and OS metadata

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "color_names": [
+    "蓝",
+    "红",
+    "白",
+    "紫"
+  ],
+  "class_names": [
+    "class_0",
+    "class_1",
+    "class_2",
+    "class_3",
+    "class_4",
+    "class_5",
+    "class_6",
+    "class_7",
+    "class_8"
+  ],
+  "point_names": [
+    "LT",
+    "LB",
+    "RB",
+    "RT"
+  ],
+  "input_width": 640,
+  "input_height": 480,
+  "preprocess": "stretch",
+  "rgb": true,
+  "normalize": true,
+  "scores_are_logits": false,
+  "score_mode": "product",
+  "confidence": 0.05,
+  "iou": 0.1,
+  "class_aware": true,
+  "output_coordinates": "input",
+  "providers": [
+    "CPUExecutionProvider"
+  ],
+  "model_path": "../../weights/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx"
+}
