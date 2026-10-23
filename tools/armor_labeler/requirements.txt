@@ -1,0 +1,7 @@
+# Desktop editor and image handling
+PySide6>=6.6,<7
+numpy>=1.26,<3
+opencv-python>=4.8,<5
+
+# Optional for ONNX pre-labeling; manual annotation works without it.
+# Install with: python -m pip install onnxruntime
