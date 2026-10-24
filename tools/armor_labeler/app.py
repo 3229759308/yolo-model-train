@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import copy
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -25,9 +27,11 @@ from core import (
     ArmorAnnotation, AnnotationStore, OnnxDetector, default_config, load_config,
     save_config, scan_images, validate_config, export_custom, export_yolo,
 )
+from detector_cache import DetectorCache
 
 
 COLORS = [QColor('#58a6ff'), QColor('#ff6478'), QColor('#f4f4f5'), QColor('#bd8bfa')]
+RELATIVE_NAME_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 
 
 def read_image(path):
@@ -35,6 +39,13 @@ def read_image(path):
     if image is None:
         raise ValueError(f'无法解码图片：{path}')
     return image
+
+
+@dataclass(frozen=True)
+class InferenceResult:
+    annotations: list[ArmorAnnotation]
+    width: int
+    height: int
 
 
 class Canvas(QWidget):
@@ -320,16 +331,18 @@ class InferenceWorker(QThread):
     failed = Signal(str, str)
     progress = Signal(int, int)
 
-    def __init__(self, model_path, config, paths):
+    def __init__(self, model_path, config, paths, detector_cache=None):
         super().__init__()
         self.model_path = model_path
         self.config = copy.deepcopy(config)
         self.paths = list(paths)
+        self.detector_cache = detector_cache
 
     def run(self):
         try:
-            detector = OnnxDetector(self.model_path, self.config)
-            self.ready.emit(str(self.model_path))
+            detector = (self.detector_cache.get(self.model_path, self.config, factory=OnnxDetector)
+                        if self.detector_cache is not None else OnnxDetector(self.model_path, self.config))
+            self.ready.emit(getattr(detector, 'backend_summary', '未报告'))
         except Exception as exc:
             self.failed.emit('', str(exc))
             return
@@ -337,8 +350,9 @@ class InferenceWorker(QThread):
             if self.isInterruptionRequested():
                 break
             try:
-                annotations = detector.predict(read_image(path))
-                self.predicted.emit(str(path), annotations)
+                image = read_image(path)
+                annotations = detector.predict(image)
+                self.predicted.emit(str(path), InferenceResult(annotations, image.shape[1], image.shape[0]))
             except Exception as exc:
                 self.failed.emit(str(path), str(exc))
                 break
@@ -365,11 +379,15 @@ class MainWindow(QMainWindow):
         self.redo_history = []
         self.loading = False
         self.worker = None
+        self.detector_cache = DetectorCache()
         self.inference_error = False
         configured_model = self.config.get('model_path', '')
         self.model_path = (str(Path(args.model).expanduser().resolve()) if args.model else
                            self.resolve_model_path(configured_model))
         self.file_states = {}
+        self.file_items = {}
+        self.file_counts = Counter()
+        self.visible_count = 0
         self.autosave = QTimer(self)
         self.autosave.setSingleShot(True)
         self.autosave.setInterval(900)
@@ -439,6 +457,8 @@ class MainWindow(QMainWindow):
         self.filter.currentIndexChanged.connect(self.filter_files)
         left_layout.addWidget(self.filter)
         self.files = QListWidget()
+        # 文件条目均为单行；固定高度避免每次状态文字变化都重算整个目录的布局。
+        self.files.setUniformItemSizes(True)
         self.files.currentItemChanged.connect(self.file_selected)
         left_layout.addWidget(self.files)
         self.stats = QLabel('0 张图片')
@@ -518,6 +538,9 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.review)
         right_layout.addSpacing(14)
         right_layout.addWidget(QLabel('自定义 ONNX 检测头'))
+        self.backend_label = QLabel('推理后端：尚未加载模型')
+        self.backend_label.setWordWrap(True)
+        right_layout.addWidget(self.backend_label)
         self.model_label = QLabel(self.model_path or '未选择模型；人工标注可直接使用')
         self.model_label.setWordWrap(True)
         right_layout.addWidget(self.model_label)
@@ -627,12 +650,18 @@ class MainWindow(QMainWindow):
         self.files.blockSignals(True)
         self.files.clear()
         self.file_states = {}
+        self.file_items = {}
+        self.file_counts = Counter()
+        self.visible_count = 0
         for path in paths:
             state = self.state_from_disk(path)
             self.file_states[str(path)] = state
+            self.file_counts[state] += 1
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, str(path))
+            item.setData(RELATIVE_NAME_ROLE, str(path.relative_to(root)))
             self.files.addItem(item)
+            self.file_items[str(path)] = item
             self.update_file_item(item)
         self.files.blockSignals(False)
         self.search.clear()
@@ -648,27 +677,60 @@ class MainWindow(QMainWindow):
             return 'error'
 
     def update_file_item(self, item):
-        path = Path(item.data(Qt.ItemDataRole.UserRole))
-        state = self.file_states.get(str(path), 'new')
+        path = item.data(Qt.ItemDataRole.UserRole)
+        state = self.file_states.get(path, 'new')
         badge = {'new': '○', 'saved': '●', 'reviewed': '✓', 'error': '!'}[state]
-        item.setText(f'{badge} {path.relative_to(self.root)}')
-        item.setToolTip(str(path))
+        relative = item.data(RELATIVE_NAME_ROLE)
+        if relative is None:
+            relative = str(Path(path).relative_to(self.root))
+            item.setData(RELATIVE_NAME_ROLE, relative)
+        item.setText(f'{badge} {relative}')
+        item.setToolTip(path)
         item.setForeground(QColor('#62cfac' if state == 'reviewed' else '#ffad66' if state == 'error' else '#dce3ed'))
+
+    def _file_matches(self, item, text=None, mode=None):
+        text = self.search.text().casefold() if text is None else text
+        mode = self.filter.currentIndex() if mode is None else mode
+        path = item.data(Qt.ItemDataRole.UserRole)
+        state = self.file_states.get(path, 'new')
+        name = item.data(RELATIVE_NAME_ROLE)
+        if name is None:
+            name = str(Path(path).relative_to(self.root)) if self.root else path
+        return (text in name.casefold() and
+                (mode == 0 or (mode == 1 and state == 'new') or
+                 (mode == 2 and state == 'saved') or (mode == 3 and state == 'reviewed')))
+
+    def _refresh_file_stats(self):
+        self.stats.setText(f'{self.visible_count} / {len(self.paths)} 张 · 已复核 {self.file_counts["reviewed"]}')
+
+    def _set_file_state(self, path_string, state):
+        previous = self.file_states.get(path_string)
+        if previous != state:
+            if previous is not None:
+                self.file_counts[previous] -= 1
+            self.file_counts[state] += 1
+            self.file_states[path_string] = state
+        item = self.file_items.get(path_string)
+        if item is not None:
+            self.update_file_item(item)
+            was_visible = not item.isHidden()
+            visible = self._file_matches(item)
+            if visible != was_visible:
+                item.setHidden(not visible)
+                self.visible_count += int(visible) - int(was_visible)
+        self._refresh_file_stats()
 
     def filter_files(self):
         text = self.search.text().casefold()
         mode = self.filter.currentIndex()
-        visible = 0
+        self.visible_count = 0
         for i in range(self.files.count()):
             item = self.files.item(i)
-            path = item.data(Qt.ItemDataRole.UserRole)
-            state = self.file_states.get(path, 'new')
-            hide = text not in str(Path(path).relative_to(self.root)).casefold() if self.root else False
-            hide |= (mode == 1 and state != 'new') or (mode == 2 and state != 'saved') or (mode == 3 and state != 'reviewed')
-            item.setHidden(hide)
-            visible += not hide
-        checked = sum(v == 'reviewed' for v in self.file_states.values())
-        self.stats.setText(f'{visible} / {len(self.paths)} 张 · 已复核 {checked}')
+            visible = self._file_matches(item, text, mode)
+            if item.isHidden() == visible:
+                item.setHidden(not visible)
+            self.visible_count += visible
+        self._refresh_file_stats()
 
     def file_selected(self, item, previous):
         if self.loading or item is None:
@@ -917,13 +979,7 @@ class MainWindow(QMainWindow):
             self.error('保存失败，当前编辑仍保留在内存', exc)
             return False
         self.dirty = False
-        self.file_states[str(self.current_path)] = 'reviewed' if self.reviewed else 'saved'
-        for i in range(self.files.count()):
-            item = self.files.item(i)
-            if item.data(Qt.ItemDataRole.UserRole) == str(self.current_path):
-                self.update_file_item(item)
-                break
-        self.filter_files()
+        self._set_file_state(str(self.current_path), 'reviewed' if self.reviewed else 'saved')
         self.setWindowTitle(f'{self.current_path.name} · Armor Labeler')
         self.update_status(f'已保存 {len(self.annotations)} 个目标 → {path}')
         return True
@@ -970,6 +1026,7 @@ class MainWindow(QMainWindow):
                 self.error('配置保存失败', exc)
                 return
             self.config = dialog.config
+            self.backend_label.setText('推理后端：下次推理使用新配置')
             self.model_path = self.resolve_model_path(self.config.get('model_path', '')) or self.model_path
             self.model_label.setText(self.model_path or '未选择模型；人工标注可直接使用')
             self.update_config_ui()
@@ -979,6 +1036,7 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, '选择自定义检测头 ONNX', '/workspace', 'ONNX (*.onnx)')
         if path:
             self.model_path = path
+            self.backend_label.setText('推理后端：尚未加载新模型')
             self.model_label.setText(path)
             self.config['model_path'] = os.path.relpath(path, self.config_path.parent)
             self.settings_timer.start()
@@ -1009,8 +1067,8 @@ class MainWindow(QMainWindow):
         self.batch_mode = batch
         self.prediction_store = self.store
         self.inference_error = False
-        self.worker = InferenceWorker(self.model_path, self.config, paths)
-        self.worker.ready.connect(lambda _: self.update_status('ONNX 模型已加载，正在推理…'))
+        self.worker = InferenceWorker(self.model_path, self.config, paths, detector_cache=self.detector_cache)
+        self.worker.ready.connect(self.inference_ready)
         self.worker.predicted.connect(self.accept_prediction)
         self.worker.failed.connect(self.inference_failed)
         self.worker.progress.connect(lambda i, total: self.update_status(f'推理进度 {i}/{total}；自动结果待复核'))
@@ -1021,8 +1079,14 @@ class MainWindow(QMainWindow):
         self.preprocessing.setEnabled(False)
         self.output_space.setEnabled(False)
         self.stop_button.setEnabled(True)
+        self.backend_label.setText('推理后端：正在加载…')
         self.update_status('正在加载 ONNX 模型…')
         self.worker.start()
+
+    def inference_ready(self, summary):
+        self.backend_label.setText(f'推理后端：{summary}')
+        self.backend_label.setToolTip(summary)
+        self.update_status(f'ONNX 模型已加载 · {summary} · 正在推理…')
 
     def accept_prediction(self, path_string, predictions, *, store=None, batch_mode=None):
         store = store if store is not None else getattr(self, 'prediction_store', self.store)
@@ -1040,15 +1104,21 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(100, lambda: self.accept_prediction(
                     path_string, predictions, store=store, batch_mode=batch_mode))
                 return
+            image_size = None
+            if isinstance(predictions, InferenceResult):
+                image_size = (predictions.width, predictions.height)
+                predictions = predictions.annotations
             if batch_mode:
                 # 推理期间用户可编辑；提交前再次检查，避免覆盖新保存的人工标签。
                 if self.store.load(path) is not None:
                     return
                 if path == self.current_path and self.dirty:
                     return
-                image = self.image if path == self.current_path else read_image(path)
-                self.store.save(path, image.shape[1], image.shape[0], predictions, reviewed=False)
-                self.file_states[path_string] = 'saved'
+                if image_size is None:
+                    image = self.image if path == self.current_path else read_image(path)
+                    image_size = (image.shape[1], image.shape[0])
+                self.store.save(path, *image_size, predictions, reviewed=False)
+                self._set_file_state(path_string, 'saved')
                 if path == self.current_path:
                     self.push_history()
                     self.annotations = predictions
@@ -1064,21 +1134,18 @@ class MainWindow(QMainWindow):
                 # 切走后仍以追加语义保存，保留目标图上的既有内容。
                 data = self.store.load(path)
                 old = [ArmorAnnotation.from_dict(a) for a in data['annotations']] if data else []
-                image = read_image(path)
-                self.store.save(path, image.shape[1], image.shape[0], old+predictions, reviewed=False)
-                self.file_states[path_string] = 'saved'
-            for i in range(self.files.count()):
-                item = self.files.item(i)
-                if item.data(Qt.ItemDataRole.UserRole) == path_string:
-                    self.update_file_item(item)
-                    break
-            self.filter_files()
+                if image_size is None:
+                    image = read_image(path)
+                    image_size = (image.shape[1], image.shape[0])
+                self.store.save(path, *image_size, old+predictions, reviewed=False)
+                self._set_file_state(path_string, 'saved')
         except Exception as exc:
             self.inference_failed(path_string, str(exc))
             self.stop_inference()
 
     def inference_failed(self, path, reason):
         self.inference_error = True
+        self.backend_label.setText('推理后端：加载或推理失败，请查看错误信息')
         self.error('推理失败', f'{path}\n{reason}' if path else reason)
 
     def stop_inference(self):
@@ -1187,6 +1254,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         if self.save_current():
+            self.detector_cache.clear()
             if self.settings_timer.isActive():
                 self.settings_timer.stop()
                 self.persist_settings()
@@ -1203,6 +1271,8 @@ def main():
     parser.add_argument('--config', default=str(Path(__file__).with_name('model_config.json')))
     parser.add_argument('--smoke-test', action='store_true', help='构造窗口并检查事件循环后退出')
     args = parser.parse_args()
+    # 图片解码/缩放仍由 CPU 完成，避免 OpenCV 再创建一组高并发线程。
+    cv2.setNumThreads(1)
     # OpenCV wheel 会注入自己的 Qt 插件路径，必须恢复 PySide6 的插件目录。
     os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath)+'/platforms'
     if 'cv2' in os.environ.get('QT_QPA_FONTDIR', ''):
