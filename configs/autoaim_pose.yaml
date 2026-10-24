@@ -1,11 +1,1 @@
-# 标注并划分完成后使用；当前还不能用于训练。
-# 在 /workspace 运行时，训练命令应传入 path=/workspace/datasets/autoaim_pose
-# 或将此处 path 改为数据集绝对路径，避免受 Ultralytics datasets_dir 设置影响。
-path: /workspace/datasets/autoaim_pose
-train: images/train
-val: images/val
-names:
-  0: armor
-kpt_shape: [4, 3]
-# 水平翻转后左右两根灯条互换，上下不变。
-flip_idx: [2, 3, 0, 1]
+armor_pose/datasets/armor.yaml

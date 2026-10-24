@@ -1,0 +1,41 @@
+# Custom 4-color + 9-class + 4-point (21-channel) training data.
+# Prepare with: python src/armor.py prepare
+# Coordinates remain original image pixels, including outside points.
+path: /workspace/datasets/armor_pose_custom
+train: images/train
+val: images/val
+label_format: custom-head-pixels
+nc: 9
+ncolor: 4
+nkpt: 4
+names:
+  0: sentry
+  1: hero
+  2: engineer
+  3: infantry_3
+  4: infantry_4
+  5: infantry_5
+  6: outpost
+  7: base_bottom
+  8: base_top
+color_names:
+  0: blue
+  1: red
+  2: white
+  3: purple
+kpt_shape:
+- 4
+- 2
+point_names:
+- LT
+- LB
+- RB
+- RT
+flip_idx:
+- 3
+- 2
+- 1
+- 0
+input_size:
+- 480
+- 640
