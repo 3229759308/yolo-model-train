@@ -1,6 +1,6 @@
 """Explicit model selection; unimplemented backbone families never fall back.
 
-Only YOLOv8n has a working adapter. Register a separately implemented adapter
+YOLOv8n and original YOLOv5n have working adapters. Register an implemented adapter
 before selecting a new backbone family; changing a YAML name is insufficient.
 """
 from __future__ import annotations
@@ -12,13 +12,15 @@ from typing import Any
 from torch import nn
 
 from .yolov8 import YoloV8ArmorPoseModel
+from .yolov5 import YoloV5ArmorPoseModel
 
 
 DEFAULT_MODEL = "yolov8n-armor-pose"
 MODEL_BUILDERS: dict[str, Callable[..., nn.Module]] = {
     DEFAULT_MODEL: YoloV8ArmorPoseModel,
+    'yolov5n-armor-pose': YoloV5ArmorPoseModel,
 }
-MODEL_ALIASES = {"yolov8n": DEFAULT_MODEL}
+MODEL_ALIASES = {"yolov8n": DEFAULT_MODEL, 'yolov5n': 'yolov5n-armor-pose'}
 
 
 def available_models() -> tuple[str, ...]:
@@ -50,7 +52,7 @@ def build_model(
         available = ", ".join(sorted(MODEL_BUILDERS))
         raise ValueError(
             f"Unsupported armor model {name!r}. Implemented models: {available}. "
-            "YOLOv5 and YOLO26 adapters are not implemented; no fallback is performed."
+            "YOLO26 is not implemented; no fallback is performed."
         )
     kwargs: dict[str, Any] = {"pretrained": pretrained}
     if backbone_weights is not None:

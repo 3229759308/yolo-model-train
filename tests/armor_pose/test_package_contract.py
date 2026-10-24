@@ -32,6 +32,7 @@ class DummyAdapter(nn.Module):
 
 class PackageContractTests(unittest.TestCase):
     def setUp(self):
+        torch.set_num_threads(2)
         self.original_builders = MODEL_BUILDERS.copy()
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -52,7 +53,7 @@ class PackageContractTests(unittest.TestCase):
     def test_unimplemented_families_and_unknown_names_never_fall_back(self):
         fallback = Mock(side_effect=AssertionError('an unsupported model must not use YOLOv8'))
         MODEL_BUILDERS[DEFAULT_MODEL] = fallback
-        for name in ('yolov5n', 'yolo26n', 'unknown-armor-model'):
+        for name in ('yolo26n', 'unknown-armor-model'):
             with self.subTest(model=name), self.assertRaisesRegex(ValueError, 'Unsupported armor model'):
                 build_model(name, pretrained=False)
         fallback.assert_not_called()
@@ -120,6 +121,43 @@ class PackageContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unsupported armor model'):
             load_model(self.checkpoint_path)
         fallback.assert_not_called()
+
+    def test_registered_yolov5_and_yolov8_checkpoint_round_trips_remain_distinct(self):
+        models = {
+            name: build_model(name, pretrained=False).eval()
+            for name in ('yolov5n-armor-pose', 'yolov8n-armor-pose')
+        }
+        self.assertIsNot(type(models['yolov5n-armor-pose']), type(models['yolov8n-armor-pose']))
+        images = torch.rand(1, 3, 64, 96)
+        for name, source in models.items():
+            for checkpoint_name in (name, name.removesuffix('-armor-pose')):
+                with self.subTest(model=name, checkpoint_name=checkpoint_name):
+                    architecture = {**source.architecture_config(), 'name': checkpoint_name}
+                    torch.save({'architecture': architecture, 'model_state_dict': source.state_dict()},
+                               self.checkpoint_path)
+                    restored, _ = load_model(self.checkpoint_path)
+                    self.assertIs(type(restored), type(source))
+                    self.assertEqual(restored.architecture_config()['name'], name)
+                    self.assertFalse(restored.training)
+                    with torch.inference_mode():
+                        torch.testing.assert_close(restored(images), source(images))
+
+    def test_checkpoint_with_the_other_backbone_name_cannot_load_silently(self):
+        models = {
+            name: build_model(name, pretrained=False).eval()
+            for name in ('yolov5n-armor-pose', 'yolov8n-armor-pose')
+        }
+        for source_name, metadata_name in (
+            ('yolov5n-armor-pose', 'yolov8n-armor-pose'),
+            ('yolov8n-armor-pose', 'yolov5n-armor-pose'),
+        ):
+            with self.subTest(weights=source_name, architecture=metadata_name):
+                torch.save({
+                    'architecture': models[metadata_name].architecture_config(),
+                    'model_state_dict': models[source_name].state_dict(),
+                }, self.checkpoint_path)
+                with self.assertRaises(RuntimeError):
+                    load_model(self.checkpoint_path)
 
     def test_prepare_help_does_not_load_torch_in_a_fresh_process(self):
         repository = Path(__file__).resolve().parents[2]

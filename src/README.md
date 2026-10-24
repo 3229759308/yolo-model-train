@@ -1,6 +1,6 @@
 # 装甲板自定义 Pose 训练与部署
 
-这套代码使用 **YOLOv8n-Pose 的骨干与特征融合网络，加自定义装甲板检测头**。颜色、装甲板类别和四个角点分别学习，保持原模型的 `4 + 9 + 8 = 21` 通道接口。统一入口是 `python src/armor.py train`，数据配置采用项目自己的格式，不能直接交给 `yolo pose train`。
+这套代码支持 **YOLOv8n-Pose 或原版 YOLOv5n v7.0 的骨干与特征融合网络，加共享自定义装甲板检测头**。颜色、装甲板类别和四个角点分别学习，保持原模型的 `4 + 9 + 8 = 21` 通道接口。统一入口是 `python src/armor.py train`，数据配置采用项目自己的格式，不能直接交给 `yolo pose train`。
 
 当前训练使用工具导出的**伪标签监督**：读取已经保存的颜色、类别和四点坐标。没有读取教师 ONNX 的原始 logits，也没有加入教师特征或软输出蒸馏损失。验证集也是这些伪标签的一部分，指标反映模型与伪标签的一致性；实际识别质量还需要独立真实标注数据或实景检验。
 
@@ -295,8 +295,8 @@ src/
     │   └── subsample.py             # 分层保留指定比例空图
     ├── models/
     │   ├── __init__.py              # 注册表与模型 factory
-    │   ├── yolov8/model.py          # 当前可训练的 YOLOv8n 适配器
-    │   ├── yolov5/README.md         # 后续适配说明，尚未实现
+    │   ├── yolov8/model.py          # YOLOv8n 适配器
+    │   ├── yolov5/model.py          # 原版 YOLOv5n v7.0 适配器
     │   └── yolo26/README.md         # 后续适配说明，尚未实现
     ├── training/
     │   └── engine.py               # 训练、续训与验证
@@ -323,7 +323,7 @@ tests/
 | `data/prepare.py`、`data/subsample.py` | 数据准备、视频隔离与空图分层抽样 |
 | `data/dataset.py` | 图像读取、letterbox、原图点到网络点的转换 |
 | `common/head.py`、`common/loss.py` | 共享 21 通道头、匹配和损失 |
-| `models/__init__.py`、`models/yolov8/model.py` | 模型选择及 YOLOv8n 特征适配 |
+| `models/__init__.py`、`models/{yolov8,yolov5}/model.py` | 模型选择与各骨干的特征适配 |
 | `training/engine.py` | 训练循环、配置、续训和验证 |
 | `common/runtime.py` | 解码、NMS、checkpoint 加载及指标统计 |
 | `inference/predict.py`、`inference/export.py` | 图片推理、坐标还原及 ONNX 导出 |
@@ -381,7 +381,7 @@ python src/armor.py train \
 
 ## 11. 接入其他骨干
 
-模型 factory 当前只实现 `yolov8n-armor-pose`，可使用别名 `yolov8n`。`models/yolov5/` 和 `models/yolo26/` 只是后续适配位置，**目前不能用于训练或导出**。未实现或未知模型名会明确报错，不会静默改用 YOLOv8。
+模型 factory 已实现 `yolov8n-armor-pose`（别名 `yolov8n`）和 `yolov5n-armor-pose`（别名 `yolov5n`）。YOLOv5 使用原版 v7.0 的骨干与 neck。`models/yolo26/` 尚未实现；未知模型名仍明确报错，不会静默改用其他网络。
 
 共享数据、损失、训练和推理的前提是适配器保持相同语义：4 色、9 类、`LT/LB/RB/RT` 四点、RGB letterbox 和网络输入像素坐标。部署输出仍为 `B×21×N`；固定 480×640、步长 8/16/32 时 `N=6300`。训练前向 `return_raw=True` 需要提供：
 
@@ -402,3 +402,25 @@ python src/armor.py train \
 5. 在 `tests/armor_pose/` 加入形状、raw API、有限损失、反向梯度、checkpoint 严格加载与 ONNX 一致性测试；先完成小规模训练与推理，再评估完整数据。
 
 如果新骨干改变输入尺寸、特征步长或候选数量，还需要同步适配检测头、部署协议和测试；不能直接沿用当前 `1×21×6300` 的部署假设。
+
+
+## 13. YOLOv5n 对照实验
+
+使用原版 YOLOv5n v7.0 的 6×6 首层、C3/SPPF 骨干与 PAN neck，输出特征层 17/20/23，对接同一个自定义 21 通道头和损失。比较的是骨干与特征融合网络的差异，数据和训练流程保持一致。
+
+```bash
+python src/armor.py train --config configs/armor_pose/yolov5n/empty10.yaml
+```
+
+配置使用空图保留原 10% 的数据：训练 2871 张、验证 693 张，100 轮、batch 8、早停 20、seed 42、AdamW lr=0.001。加载本地 `weights/yolov5n.pt` 的 COCO 预训练骨干，严格校验所有骨干张量，重新初始化装甲板头。权重缺失或形状不符会报错；显式 `--from-scratch` 才使用随机骨干。
+
+官方预训练文件来自 [YOLOv5 v7.0](https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n.pt)，不是 YOLOv5u。骨干实现和权重来源见 [YOLOv5 说明](armor_pose/models/yolov5/README.md)。
+
+结果保存到 `runs/armor_pose_custom/yolov5n_empty10`。本次后台任务的日志在 `outputs/armor_pose_yolov5n_job/training.log`；任务完成后会自动导出并校验 `best.onnx`，再使用原完整验证集复评，与 YOLOv8n 的同集结果保存在 `comparison_original_val.json`。
+
+手动导出：
+
+```bash
+/workspace/tools/bit-auto-label/.venv/bin/python src/armor.py export \
+  --weights /workspace/runs/armor_pose_custom/yolov5n_empty10/best.pt --verify
+```
