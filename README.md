@@ -14,7 +14,7 @@
 
 ## 装甲板自定义检测头训练
 
-训练使用 YOLOv8n-Pose 骨干和自定义头，独立输出 4 种颜色、9 种类别、4 个点，固定输入 `1×3×480×640`、输出 `1×21×6300`。使用统一入口：
+训练支持 YOLOv8n-Pose、原版 YOLOv5n 骨干和共享自定义头，独立输出 4 种颜色、9 种类别、4 个点，固定输入 `1×3×480×640`、输出 `1×21×6300`。使用统一入口：
 
 ```bash
 python src/armor.py models
@@ -23,7 +23,13 @@ python src/armor.py train --config configs/armor_pose/yolov8n/empty10.yaml
 
 `empty10.yaml` 使用保留原空图 10% 的数据集；完整原数据配置为 [default.yaml](configs/armor_pose/yolov8n/default.yaml)。数据、网络、损失、训练和部署实现分在 `src/armor_pose/` 对应子包，配置按骨干放在 `configs/armor_pose/`。准备、空图抽样、验证、预测、导出、目录树和学习顺序见 [训练与代码说明](src/README.md)。
 
-目前可训练模型为 `yolov8n-armor-pose`（别名 `yolov8n`）；YOLOv5 和 YOLO26 目录仅预留适配说明，尚未实现。旧 CLI 薄包装和旧 YAML 相对链接保留兼容。
+目前可训练模型为 `yolov8n-armor-pose` / `yolov8n` 和原版 v7.0 的 `yolov5n-armor-pose` / `yolov5n`；YOLO26 尚未实现。两个已实现模型共享独立颜色、类别和四点头，旧 CLI 与 YAML 路径保留兼容。
+
+YOLOv5n 对照训练：
+
+```bash
+python src/armor.py train --config configs/armor_pose/yolov5n/empty10.yaml
+```
 
 ## Git 使用
 

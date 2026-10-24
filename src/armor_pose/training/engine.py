@@ -110,7 +110,7 @@ def run_training(config, resume=None):
     val_loader = make_loader(config, 'val', device, config['max_val_images'])
     if not len(train_loader.dataset) or not len(val_loader.dataset):
         raise ValueError('Both train and val must contain images')
-    print(json.dumps({'device': str(device), 'train_images': len(train_loader.dataset),
+    print(json.dumps({'device': str(device), 'model': config.get('model', DEFAULT_MODEL), 'train_images': len(train_loader.dataset),
                       'val_images': len(val_loader.dataset), 'head': '4 colors + 9 classes + 8 XY'}, ensure_ascii=False), flush=True)
     if resume:
         model, previous = load_model(resume, device)
