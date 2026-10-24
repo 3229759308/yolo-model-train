@@ -11,7 +11,7 @@ import unittest
 
 import numpy as np
 
-from core import OnnxDetector, default_config
+from core import OnnxDetector, default_config as _default_config
 
 try:
     import onnx
@@ -19,6 +19,13 @@ try:
     import onnxruntime  # noqa: F401 -- explicitly test runtime availability
 except ImportError:
     onnx = None
+
+
+def default_config():
+    """Keep numerical adapter checks deterministic across CPU and CUDA hosts."""
+    config = _default_config()
+    config['providers'] = ['CPUExecutionProvider']
+    return config
 
 
 @unittest.skipUnless(onnx is not None, 'optional onnx and onnxruntime are required')

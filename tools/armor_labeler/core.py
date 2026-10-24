@@ -112,8 +112,9 @@ def default_config() -> dict[str, Any]:
         'preprocess': 'stretch', 'rgb': True, 'normalize': True,
         'scores_are_logits': False, 'score_mode': 'product',
         'confidence': 0.25, 'iou': 0.45, 'class_aware': True,
-        'output_coordinates': 'original', 'providers': ['CPUExecutionProvider'],
-        'model_path': '',
+        'output_coordinates': 'original',
+        'providers': ['CUDAExecutionProvider', 'CPUExecutionProvider'],
+        'cpu_threads': 2, 'thread_spinning': False, 'model_path': '',
     }
 
 
@@ -130,7 +131,7 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         if (not isinstance(names, list) or len(names) != count
                 or any(not isinstance(name, str) or not name.strip() for name in names)):
             raise ValueError(f'{key} 必须包含 {count} 个非空名称')
-    for key in ('input_width', 'input_height'):
+    for key in ('input_width', 'input_height', 'cpu_threads'):
         result[key] = _integer(result[key], key, 1)
     if result['preprocess'] not in ('stretch', 'letterbox'):
         raise ValueError('preprocess 必须为 stretch 或 letterbox')
@@ -140,7 +141,7 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         raise ValueError('output_coordinates 必须为 original 或 input')
     if not isinstance(result['model_path'], str):
         raise ValueError('model_path 必须是字符串（可留空手动选择模型）')
-    for key in ('rgb', 'normalize', 'scores_are_logits', 'class_aware'):
+    for key in ('rgb', 'normalize', 'scores_are_logits', 'class_aware', 'thread_spinning'):
         if not isinstance(result[key], bool):
             raise ValueError(f'{key} 必须是布尔值')
     for key in ('confidence', 'iou'):
@@ -438,11 +439,77 @@ class OnnxDetector:
             import onnxruntime as ort
         except ImportError as exc:
             raise RuntimeError('自动标注需要 onnxruntime，请在当前 Python 环境运行：python -m pip install onnxruntime') from exc
+        requested = list(dict.fromkeys(self.config['providers']))
         available = ort.get_available_providers()
-        missing = [provider for provider in self.config['providers'] if provider not in available]
+        cuda = 'CUDAExecutionProvider'
+        cpu = 'CPUExecutionProvider'
+        cuda_requested = cuda in requested
+        cpu_fallback = cpu in requested
+        missing = [provider for provider in requested if provider != cuda and provider not in available]
         if missing:
             raise ValueError(f'当前 ONNX Runtime 不支持配置的 provider：{missing}；可用：{available}')
-        self.session = ort.InferenceSession(str(self.model_path), providers=self.config['providers'])
+        self.warnings: list[str] = []
+        self.session_options = ort.SessionOptions()
+        self.session_options.intra_op_num_threads = self.config['cpu_threads']
+        self.session_options.inter_op_num_threads = 1
+        self.session_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        spinning = '1' if self.config['thread_spinning'] else '0'
+        self.session_options.add_session_config_entry('session.intra_op.allow_spinning', spinning)
+        self.session_options.add_session_config_entry('session.inter_op.allow_spinning', spinning)
+
+        providers = requested.copy()
+        if cuda_requested and cuda not in available:
+            if not cpu_fallback:
+                raise RuntimeError('当前 ONNX Runtime 不提供 CUDA，且未配置 CPU 兜底；请启用 CPU 或安装支持 CUDA 的 Runtime')
+            providers.remove(cuda)
+            self.warnings.append('当前 ONNX Runtime 不提供 CUDA，已回退到 CPU')
+        elif cuda_requested:
+            # CUDA libraries can already be installed with PyTorch/NVIDIA wheels,
+            # yet remain invisible to ORT's provider loader until preloaded.
+            preload = getattr(ort, 'preload_dlls', None)
+            if callable(preload):
+                try:
+                    preload()
+                except Exception as exc:
+                    self.warnings.append(f'CUDA 依赖预加载失败，继续检查实际执行后端：{exc}')
+
+        try:
+            self.session = ort.InferenceSession(str(self.model_path),
+                                               sess_options=self.session_options, providers=providers)
+        except Exception as exc:
+            if not cuda_requested:
+                raise
+            if not cpu_fallback:
+                raise RuntimeError(f'CUDA 模型加载失败，且未配置 CPU 兜底：{exc}') from exc
+            self.warnings.append(f'CUDA 模型加载失败，已回退到 CPU：{exc}')
+            self.session = ort.InferenceSession(str(self.model_path),
+                                               sess_options=self.session_options, providers=[cpu])
+
+        self.providers = list(self.session.get_providers())
+        if cuda_requested and cuda not in self.providers:
+            if not cpu_fallback:
+                raise RuntimeError(f'CUDA 未成功启用，实际执行后端为 {self.providers}；未配置 CPU 兜底，已停止加载')
+            if cpu not in self.providers:
+                raise RuntimeError(f'CUDA 未成功启用且 CPU 回退不可用，实际执行后端：{self.providers}')
+            if not any('回退' in warning for warning in self.warnings):
+                self.warnings.append('CUDA 未成功启用，已回退到 CPU；请检查 CUDA 依赖和 Runtime 日志')
+        missing_other = [provider for provider in requested if provider not in (cuda, cpu)
+                         and provider not in self.providers]
+        if missing_other:
+            raise RuntimeError(f'配置的执行后端未成功启用：{missing_other}；实际执行后端：{self.providers}')
+        # Avoid ORT silently rebuilding a failed CUDA session on CPU during run().
+        # Initialization fallback above is explicit and reflected in the UI.
+        disable_fallback = getattr(self.session, 'disable_fallback', None)
+        if callable(disable_fallback):
+            disable_fallback()
+        labels = {cuda: 'CUDA', cpu: 'CPU', 'TensorrtExecutionProvider': 'TensorRT'}
+        active = [labels.get(provider, provider.removesuffix('ExecutionProvider'))
+                  for provider in self.providers]
+        gpu_active = any(provider != cpu for provider in self.providers)
+        self.backend_summary = ('GPU · ' + ' / '.join(active)) if gpu_active else 'CPU'
+        fallback_warnings = [warning for warning in self.warnings if '回退' in warning]
+        if fallback_warnings:
+            self.backend_summary += ' · ' + '；'.join(fallback_warnings)
         inputs = self.session.get_inputs()
         if len(inputs) != 1:
             raise ValueError('模型必须只有一个图像输入')
@@ -472,7 +539,6 @@ class OnnxDetector:
             shapes = [item.shape for item in self.session.get_outputs()]
             raise ValueError(f'模型必须有一个可识别的 21 通道输出，实际输出：{shapes}')
         self.output_name = candidates[0].name
-        self.providers = self.session.get_providers()
 
     def predict(self, image: np.ndarray, confidence: float | None = None,
                 iou: float | None = None) -> list[ArmorAnnotation]:

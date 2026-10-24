@@ -199,6 +199,77 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), corrupt)
         self.assertIn('保存失败', self.errors[0][0])
 
+    def test_batch_result_uses_worker_dimensions_without_decoding_again(self):
+        self.window.batch_mode = True
+        target = self.images / '02.png'
+        prediction = self.prediction()
+        result = labeler.InferenceResult([prediction], width=640, height=480)
+        with patch.object(labeler, 'read_image',
+                          side_effect=AssertionError('worker already decoded this image')):
+            self.window.accept_prediction(str(target), result)
+        saved = self.window.store.load(target)
+        self.assertIsNotNone(saved)
+        self.assertEqual((saved['image']['width'], saved['image']['height']), (640, 480))
+        self.assertEqual(saved['annotations'], [prediction.to_dict()])
+        self.assertEqual(self.window.current_path, self.images / '01.png')
+        self.assertEqual(self.window.annotations, [])
+        self.assertEqual(self.errors, [])
+
+    def test_batch_result_updates_filter_and_counts_without_rescanning_files(self):
+        self.window.batch_mode = True
+        target = self.images / '02.png'
+        self.window.search.setText('02')
+        self.window.filter.setCurrentIndex(1)  # New images only.
+        self.assertFalse(self.window.files.item(1).isHidden())
+        self.assertEqual(self.window.stats.text(), '1 / 2 张 · 已复核 0')
+        result = labeler.InferenceResult([self.prediction()], width=640, height=480)
+        with patch.object(self.window, 'filter_files',
+                          side_effect=AssertionError('batch result rescanned the file list')):
+            self.window.accept_prediction(str(target), result)
+        self.assertEqual(self.window.file_states[str(target)], 'saved')
+        self.assertTrue(self.window.files.item(1).isHidden())
+        self.assertTrue(self.window.files.item(1).text().startswith('● '))
+        self.assertEqual(self.window.stats.text(), '0 / 2 张 · 已复核 0')
+        self.window.filter.setCurrentIndex(2)  # Saved images only.
+        self.assertFalse(self.window.files.item(1).isHidden())
+        self.assertEqual(self.window.stats.text(), '1 / 2 张 · 已复核 0')
+        self.window.search.setText('01')
+        self.assertTrue(self.window.files.item(1).isHidden())
+        self.assertEqual(self.window.stats.text(), '0 / 2 张 · 已复核 0')
+        self.assertEqual(self.errors, [])
+
+    def test_reviewed_saves_update_filter_and_counts_without_rescanning_files(self):
+        self.window.search.setText('01')
+        self.window.filter.setCurrentIndex(3)  # Reviewed images only.
+        self.assertEqual(self.window.stats.text(), '0 / 2 张 · 已复核 0')
+        self.window.review.setChecked(True)
+        with patch.object(self.window, 'filter_files',
+                          side_effect=AssertionError('save rescanned the file list')):
+            self.assertTrue(self.window.save_current())
+            self.assertTrue(self.window.save_current(force=True))
+        self.assertFalse(self.window.files.item(0).isHidden())
+        self.assertTrue(self.window.files.item(0).text().startswith('✓ '))
+        self.assertEqual(self.window.stats.text(), '1 / 2 张 · 已复核 1')
+        self.window.review.setChecked(False)
+        with patch.object(self.window, 'filter_files',
+                          side_effect=AssertionError('save rescanned the file list')):
+            self.assertTrue(self.window.save_current())
+        self.assertTrue(self.window.files.item(0).isHidden())
+        self.assertEqual(self.window.stats.text(), '0 / 2 张 · 已复核 0')
+        self.assertEqual(self.errors, [])
+
+    def test_batch_prediction_accepts_legacy_list_for_noncurrent_image(self):
+        self.window.batch_mode = True
+        target = self.images / '02.png'
+        prediction = self.prediction()
+        with patch.object(labeler, 'read_image', wraps=labeler.read_image) as read_image:
+            self.window.accept_prediction(str(target), [prediction])
+        read_image.assert_called_once_with(target)
+        saved = self.window.store.load(target)
+        self.assertEqual((saved['image']['width'], saved['image']['height']), (640, 480))
+        self.assertEqual(saved['annotations'], [prediction.to_dict()])
+        self.assertEqual(self.errors, [])
+
     def test_batch_prediction_does_not_overwrite_new_manual_edits(self):
         self.window.batch_mode = True
         self.create_with_clicks()
@@ -454,6 +525,89 @@ class GuiTests(unittest.TestCase):
             self.assertTrue(self.window.infer_button.isEnabled())
         self.assertEqual(len(self.window.annotations), 1)
         self.assertEqual(self.window.annotations[0].source, 'model')
+        self.assertEqual(self.errors, [])
+
+    def test_repeated_inference_reuses_detector_and_appends_new_results(self):
+        constructions = []
+        calls = []
+        prediction = self.prediction()
+
+        class FakeDetector:
+            def __init__(self, model_path, config):
+                constructions.append(model_path)
+                self.config = copy.deepcopy(config)
+
+            def predict(self, image):
+                calls.append(image.shape)
+                return [copy.deepcopy(prediction)]
+
+        self.window.model_path = 'fake.onnx'
+        with patch.object(labeler, 'OnnxDetector', FakeDetector):
+            for expected_count in (1, 2):
+                self.window.infer_current()
+                for _ in range(100):
+                    QTest.qWait(10)
+                    if not self.window.worker.isRunning() and self.window.infer_button.isEnabled():
+                        break
+                self.assertFalse(self.window.worker.isRunning())
+                self.assertTrue(self.window.infer_button.isEnabled())
+                self.assertEqual(len(self.window.annotations), expected_count)
+        self.assertEqual(len(constructions), 1)
+        self.assertEqual(Path(constructions[0]).name, 'fake.onnx')
+        self.assertEqual(calls, [(480, 640, 3), (480, 640, 3)])
+        self.window.undo()
+        self.assertEqual(len(self.window.annotations), 1)
+        self.assertEqual(self.errors, [])
+
+    def test_worker_result_contains_dimensions_from_the_decoded_image(self):
+        prediction = self.prediction()
+        received = []
+        failed = []
+
+        class FakeDetector:
+            def __init__(self, model_path, config):
+                pass
+
+            def predict(self, image):
+                return [copy.deepcopy(prediction)]
+
+        worker = labeler.InferenceWorker('fake.onnx', default_config(),
+                                         [self.images / '02.png'])
+        worker.predicted.connect(lambda path, result: received.append((path, result)))
+        worker.failed.connect(lambda path, reason: failed.append((path, reason)))
+        with patch.object(labeler, 'OnnxDetector', FakeDetector):
+            worker.run()
+        self.assertEqual(failed, [])
+        self.assertEqual(len(received), 1)
+        path, result = received[0]
+        self.assertEqual(path, str(self.images / '02.png'))
+        self.assertIsInstance(result, labeler.InferenceResult)
+        self.assertEqual((result.width, result.height), (640, 480))
+        self.assertEqual([ann.to_dict() for ann in result.annotations], [prediction.to_dict()])
+
+    def test_actual_backend_stays_visible_after_worker_progress_and_completion(self):
+        prediction = self.prediction()
+        for summary in ('GPU · CUDA / CPU', 'CPU · CUDA 加载失败，已回退到 CPU'):
+            with self.subTest(summary=summary):
+                class FakeDetector:
+                    def __init__(self, model_path, config):
+                        self.backend_summary = summary
+
+                    def predict(self, image):
+                        return [copy.deepcopy(prediction)]
+
+                self.window.model_path = 'fake.onnx'
+                with patch.object(labeler, 'OnnxDetector', FakeDetector):
+                    self.window.infer_current()
+                    for _ in range(100):
+                        QTest.qWait(10)
+                        if not self.window.worker.isRunning() and self.window.infer_button.isEnabled():
+                            break
+                    self.assertFalse(self.window.worker.isRunning())
+                    self.assertTrue(self.window.infer_button.isEnabled())
+                self.assertIn(summary, self.window.backend_label.text())
+                self.window.statusBar().showMessage('下一张图片')
+                self.assertIn(summary, self.window.backend_label.text())
         self.assertEqual(self.errors, [])
 
     def test_stop_batch_finishes_current_image_without_processing_next(self):

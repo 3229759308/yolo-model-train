@@ -33,7 +33,31 @@ ARMOR_LABELER_PYTHON=/workspace/.venv-armor-labeler/bin/python bash tools/armor_
 
 桌面使用需要可用的 X11 或 Wayland 显示会话；容器或远程终端需带有正确的显示会话环境，例如 `DISPLAY`。无显示环境可运行文末的 offscreen 检查。
 
-手动标注无需 ONNX Runtime。要使用 ONNX 预标注，在所选环境安装 `onnxruntime`；可在满足对应系统依赖时自行使用 `onnxruntime-gpu` 替代。
+手动标注无需 ONNX Runtime。CPU 预标注可安装 `onnxruntime`；使用 NVIDIA GPU 时安装匹配 CUDA/cuDNN 的 `onnxruntime-gpu`。当前复用环境已安装 GPU 版本，无需重复安装。
+
+### 推理后端与 CPU 占用
+
+默认优先使用 `CUDAExecutionProvider`，由 `CPUExecutionProvider` 备用。创建 GPU 推理会话前，程序会调用可用的 `onnxruntime.preload_dlls()`，加载环境中已有的 CUDA/cuDNN 库，避免已安装 GPU 版本却因动态库未加载而回退到 CPU。
+
+窗口右侧“推理后端”显示模型实际加载的后端。CUDA 不可用或加载失败时，配置包含 CPU 备用项则回退到 CPU，并在该位置显示说明；只请求 CUDA 且无法启用时会报错。
+
+默认将 ONNX Runtime 算子内 CPU 线程数限制为 2，算子间线程数固定为 1，使用顺序执行并关闭线程空转等待；桌面启动时将 OpenCV 线程数限制为 1。图片读取、预处理和 NMS 仍由 CPU 执行。这些限制用于减少占用，不代表整个进程只会创建两个线程。
+
+可在“配置”窗口调整：
+
+```json
+{
+  "providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+  "cpu_threads": 2,
+  "thread_spinning": false
+}
+```
+
+仅使用 CPU 时将 `providers` 设为 `["CPUExecutionProvider"]`。修改配置后，下次推理会重新加载模型；更新程序后请重启已打开的窗口。
+
+同一窗口会复用已加载的模型会话，连续单张推理或再次批量推理时无需重复加载和首次初始化。模型文件或配置变化后自动重建会话，关闭窗口时释放缓存。第一次推理仍包含模型加载和 GPU 初始化时间，比较推理速度时应将其与后续推理分开。
+
+批量结果只更新对应图片的文件条目、筛选可见性和计数；完整列表筛选仅在修改搜索或筛选条件时执行。文件列表使用统一条目高度，避免每张结果触发全目录布局。工作线程同时传递已读取的图片尺寸，保存结果时无需再次解码原图。
 
 ## 标注与配置
 
@@ -102,7 +126,7 @@ Class ID `5` 和 Color ID `3` 保留原编号，其余 ID 不压缩或重排，�
 
 默认预处理为直接 resize 至 `640×480`、BGR 转 RGB、除以 255，输出 float32 NCHW。可切换 letterbox、保留 BGR、关闭归一化；模型输入为 float16 时推理层自动转换。配置中的 `scores_are_logits` 可对分支分数应用 sigmoid，默认关闭。
 
-解码分别选择颜色和类别分支得分最高的类别，默认置信度为两个分支分数之积，也可选择最小值或单独一个分支。程序通用默认置信度阈值为 0.25、IoU 阈值为 0.45；当前随附配置分别为 0.05 和 0.1，可在窗口中调整并自动保存。通过四点外接矩形执行 NMS，默认仅抑制同颜色且同类别的重叠候选。模型没有单独的 bbox 或 objectness 通道。
+解码分别选择颜色和类别分支得分最高的类别，默认置信度为两个分支分数之积，也可选择最小值或单独一个分支。程序通用默认置信度阈值为 0.25、IoU 阈值为 0.45；实际运行值以 `model_config.json` 为准，可在窗口中调整并自动保存。通过四点外接矩形执行 NMS，默认仅抑制同颜色且同类别的重叠候选。模型没有单独的 bbox 或 objectness 通道。
 
 ## 标签与导出
 

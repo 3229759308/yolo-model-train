@@ -30,12 +30,15 @@
   "normalize": true,
   "scores_are_logits": false,
   "score_mode": "product",
-  "confidence": 0.05,
-  "iou": 0.1,
+  "confidence": 0.6,
+  "iou": 0.5,
   "class_aware": true,
   "output_coordinates": "input",
   "providers": [
+    "CUDAExecutionProvider",
     "CPUExecutionProvider"
   ],
+  "cpu_threads": 2,
+  "thread_spinning": false,
   "model_path": "../../weights/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx"
 }
