@@ -56,7 +56,7 @@ docker build . --target yolo-train -t yolo-train:latest \
 
 镜像约 12 GB，接收方只需要镜像和本仓库代码，**不需要**重新构建，也不需要访问 `github` / `pypi`。
 
-接收方拿到镜像后，按 [README](../../README.md#development) 克隆仓库并 `Reopen in Container` 即可。
+接收方拿到镜像后，按 [README](../../README.md#开发环境) 克隆仓库并 `Reopen in Container` 即可。
 
 ### 方式一：镜像仓库（推荐长期使用）
 
