@@ -2,26 +2,28 @@
 
 使用独立的 PySide6 桌面窗口进行人工标注和 ONNX 预标注。颜色分支与装甲板类别分开保存，适配 YOLOv8n-Pose 骨干加自定义检测头。
 
-已接入工作区真实模型 `models/teacher/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，随附配置默认加载它。该模型的实际输出为**网络输入坐标**，工具会还原成原图像素后供编辑和保存；这与最初描述的“模型直接输出原图坐标”不同，详见下方实测说明。
+随附配置默认加载教师模型 `models/teacher/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`。该模型输出**网络输入坐标**，工具会还原成原图像素后供编辑和保存，见下方「自定义头约定」。
 
 ## 启动
 
+在仓库根目录执行：
+
 ```bash
-bash tools/armor_labeler/start.sh --images /workspace/data/raw_image/test
+bash tools/armor_labeler/start.sh --images data/raw_image
 ```
 
 不传 `--images` 时可在窗口内打开目录。`model_config.json` 中的 `model_path` 默认为 `../../models/teacher/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，相对配置文件所在目录解析。也可指定标签目录及另一份自定义 ONNX：
 
 ```bash
 bash tools/armor_labeler/start.sh \
-  --images /workspace/data/raw_image/test \
-  --labels /workspace/data/armor_annotations \
-  --model /path/to/v8n-20260726.onnx
+  --images data/raw_image \
+  --labels <标签目录> \
+  --model results/<实验名>/best.onnx
 ```
 
-`--config /path/to/config.json` 可加载自定义配置，`--model` 覆盖其中的默认模型路径。窗口右侧提供预处理方式和模型输出坐标的下拉选项，无需编辑 JSON；“配置”窗口还能调整类别名称、关键点名称、分支分数等参数。更换模型时请同时检查这些约定。
+`--config /path/to/config.json` 可加载自定义配置，`--model` 覆盖其中的默认模型路径。窗口右侧提供预处理方式和模型输出坐标的下拉选项，无需编辑 JSON；“配置”窗口还能调整类别名称、关键点名称、分支分数等参数。更换模型时请同时检查这些约定；加载本项目导出的模型时把预处理切换为 letterbox。
 
-未指定 `--labels` 时，默认使用图片目录旁的 `<图片目录名>_labels`，例如 `/data/images` 对应 `/data/images_labels`。编辑后约 900 ms 自动保存，切换图片也会保存；无效或损坏的已有 JSON 会显示错误并阻止覆盖，请先修复该文件。
+未指定 `--labels` 时，默认使用图片目录旁的 `<图片目录名>_labels`，例如 `data/raw_image` 对应 `data/raw_image_labels`。编辑后约 900 ms 自动保存，切换图片也会保存；无效或损坏的已有 JSON 会显示错误并阻止覆盖，请先修复该文件。
 
 启动脚本优先使用环境变量 `ARMOR_LABELER_PYTHON` 指定的 Python，否则使用 `python3`。开发容器的 Python 已包含全部依赖；在容器外使用时可新建环境：
 
@@ -80,11 +82,11 @@ ARMOR_LABELER_PYTHON=/workspace/.venv-armor-labeler/bin/python bash tools/armor_
 
 当前图推理会追加候选供人工编辑；目录批量推理只处理**没有 JSON 标签**的图片，跳过所有已有标签，包括空标签和损坏标签，保护人工结果。自动结果始终标记为待复核。推理可停止；推理进行时关闭窗口会先请求停止，请在推理结束后再次关闭。
 
-随附模型配置参照现有样例使用 `LT、LB、RB、RT`（左上、左下、右下、右上）。程序通用默认值 `default_config()` 仍使用 `P0、P1、P2、P3` 占位，便于适配其他点序。工具保留人工点序及模型输出顺序，请使标注、训练和部署三处一致。
+随附模型配置使用 `LT、LB、RB、RT`（左上、左下、右下、右上）。程序通用默认值 `default_config()` 仍使用 `P0、P1、P2、P3` 占位，便于适配其他点序。工具保留人工点序及模型输出顺序，请使标注、训练和部署三处一致。
 
 ### 类别与颜色定义
 
-以下为用户提供的类别与颜色定义。类别 ID 对应输出通道 `4～12`，即 `输出通道 = Class ID + 4`；颜色 ID 对应输出通道 `0～3`。
+类别 ID 对应输出通道 `4～12`，即 `输出通道 = Class ID + 4`；颜色 ID 对应输出通道 `0～3`。
 
 | Class ID | 类别 | 备注 |
 | --- | --- | --- |
@@ -118,11 +120,11 @@ Class ID `5` 和 Color ID `3` 保留原编号，其余 ID 不压缩或重排，�
 - 通道 `4～12`：九种装甲类别分支分数。
 - 通道 `13～20`：按配置点序排列的四组 `(x,y)`。
 
-真实 ONNX 的关键点末端计算为 `(raw * 2 + grid) * stride`，得到网络输入空间坐标，没有原图尺寸或缩放逆变换。以 `1440×1080` 样例为例，原始输出的左上点约为 `(280.2,186.0)`；按 `2.25` 倍还原约为 `(630.5,418.5)`，与人工左上点约 `(631.5,412.2)` 接近。直接把网络输出当作原图像素会导致位置和尺寸明显偏小。
+真实 ONNX 的关键点末端计算为 `(raw * 2 + grid) * stride`，得到网络输入空间坐标，没有原图尺寸或缩放逆变换；直接把网络输出当作原图像素会导致位置和尺寸明显偏小。
 
 因此，随附 `model_config.json` 对此模型使用 `output_coordinates: "input"`；推理层按当前预处理将四点还原到原图。stretch 分别乘以原图与输入的宽高比；letterbox 先扣除实际整数 padding，再按实际 resize 后的宽高比例还原。允许图外点，不会在逆映射时裁剪。
 
-对于确实直接输出原图像素的其他自定义头，可在“模型输出坐标”中选择原图，对应 `output_coordinates: "original"`，此时不执行逆变换。程序通用 `default_config()` 保持该值，以兼容最初约定。无论选哪种模型坐标，**画布、原生 JSON 和自定义 TXT 始终使用原图像素**。
+对于确实直接输出原图像素的其他自定义头，可在“模型输出坐标”中选择原图，对应 `output_coordinates: "original"`，此时不执行逆变换。程序通用 `default_config()` 默认使用该值。无论选哪种模型坐标，**画布、原生 JSON 和自定义 TXT 始终使用原图像素**。
 
 默认预处理为直接 resize 至 `640×480`、BGR 转 RGB、除以 255，输出 float32 NCHW。可切换 letterbox、保留 BGR、关闭归一化；模型输入为 float16 时推理层自动转换。配置中的 `scores_are_logits` 可对分支分数应用 sigmoid，默认关闭。
 
@@ -160,4 +162,4 @@ QT_QPA_PLATFORM=offscreen python3 -m unittest discover -v -p 'test_*.py'
 QT_QPA_PLATFORM=offscreen bash start.sh --smoke-test
 ```
 
-测试发现命令覆盖核心、GUI 和 ONNX 适配；ONNX 测试临时生成合成模型，需要 `onnx` 和 `onnxruntime`，缺少时会跳过。用户提供的实际模型已另行完成图片推理及界面保存验证。无显示环境下的 smoke test 验证窗口初始化，不会代替真实桌面的鼠标交互验收。
+测试发现命令覆盖核心、GUI 和 ONNX 适配；ONNX 测试临时生成合成模型，需要 `onnx` 和 `onnxruntime`，缺少时会跳过。无显示环境下的 smoke test 验证窗口初始化，不会代替真实桌面的鼠标交互验收。
