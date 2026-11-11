@@ -73,7 +73,7 @@ sha256sum tools/bit-auto-label/models/sam3.pt
 
 ## 重建环境
 
-当前容器已安装 Linux 图形库与中文字体。若重建 Docker 容器，先以 root 执行：
+仓库的开发镜像（根目录 `Dockerfile`）已在构建时执行 `system-deps.sh`，通过 `Reopen in Container` 创建的容器无需再装 Linux 图形库与中文字体。若使用其他容器，先以 root 执行：
 
 ```bash
 bash tools/armorlabel_env/system-deps.sh

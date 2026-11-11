@@ -1,16 +1,92 @@
 # YOLO 训练工作区
 
-在当前 Docker 容器内管理 YOLO 训练代码及配置。
+装甲板检测模型的训练、标注与导出工作区，开发环境以 Docker 容器形式提供。
 
-建议目录：
+## Development
+
+### Pre-requirements:
+
+- x86-64 架构，NVIDIA 显卡（RTX 20 系列及更新），驱动 ≥ 580
+- 任意 Linux 发行版，或 WSL2
+- [VSCode](https://code.visualstudio.com/)，安装 [Dev Containers 扩展](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+- [安装 Docker 并 配置代理（部分国家或地区）](docs/zh-cn/docker_with_proxy.md)
+- [安装 NVIDIA 驱动与 NVIDIA Container Toolkit](docs/zh-cn/nvidia_docker_setup.md)
+
+### Step 1：获取镜像
+
+开发容器使用本机的 `yolo-train:latest` 镜像。从维护者处拿到镜像文件后导入：
+
+```bash
+docker load -i yolo-train.tar.gz
+```
+
+也可以从镜像仓库拉取，或在克隆仓库后用 `Dockerfile` 自行构建，参见 [镜像构建与分发指南](docs/zh-cn/build_docker_image.md)。
+
+### Step 2：克隆并打开仓库
+
+克隆仓库，注意需要使用 `recurse-submodules` 以克隆子模块：
+
+```bash
+git clone --recurse-submodules https://github.com/3229759308/yolo-model-train.git
+```
+
+在 VSCode 中打开仓库：
+
+```bash
+code ./yolo-model-train
+```
+
+按 `Ctrl+Shift+P`，在弹出的菜单中选择 `Dev Containers: Reopen in Container`。
+
+VSCode 将拉起一个 `Docker` 容器，容器中已配置好完整训练环境，之后所有工作将在容器内进行。若提示 `image yolo-train:latest not found`，说明 Step 1 尚未完成。
+
+如果 `Dev Containers` 在启动时卡住很长一段时间，可以尝试 [这个解决方案](docs/zh-cn/fix_devcontainer_stuck.md)。
+
+### Step 3：确认环境
+
+容器创建完成后会自动运行一次环境检查，也可以在 VSCode 终端中随时输入：
+
+```bash
+check-env
+```
+
+输出以 `== Environment ready` 结尾即表示 GPU 与训练依赖均可用，否则参见 [NVIDIA 配置排查](docs/zh-cn/nvidia_docker_setup.md#容器内排查)。
+
+容器内已包含：
+
+| 组件 | 版本 |
+| --- | --- |
+| Ubuntu / Python | 24.04 / 3.12 |
+| PyTorch / CUDA | 2.14.1 / 13.2 |
+| torchvision | 0.29.1 |
+| Ultralytics | 8.4.182 |
+| OpenCV（headless） | 5.0 |
+| ONNX / ONNX Runtime（CPU） | 1.23.2 / 1.31.1 |
+| PySide6（标注工具界面） | 6.12.0 |
+| opencode | 2.2.5 |
+
+终端为 `zsh` + `oh-my-zsh`（`af-magic` 主题），`.script/` 下的指令已加入 `PATH`，命令历史保存在 `.devcontainer/.zsh_history`，重建容器后仍保留。
+
+如需把本机的个人配置（如 opencode 的模型配置与会话）挂进容器，编辑 `.devcontainer/docker-compose.local.yml`（首次打开容器时自动生成，不提交 Git，文件内有示例），然后 `Rebuild Container`。
+
+运行单元测试：
+
+```bash
+PYTHONPATH=src python -m unittest discover -s tests -t .
+```
+
+> 容器内用户为 `ubuntu`（可免密 `sudo`），其 UID 会自动映射为主机当前用户，容器内产生的文件在主机上直接归你所有。
+>
+> 从旧的 root 容器迁移过来时，先在**主机**仓库根目录执行一次 `sudo chown -R $USER: .`，否则旧的 root 文件在容器内无法写入。
+
+## 目录约定
 
 - `src/`：训练、验证和推理代码
 - `configs/`：模型及数据集 YAML 配置，可提交到 Git
 - `data/` 或 `datasets/`：本地数据集，不提交
 - `weights/`：预训练权重，不提交
 - `runs/`：训练结果，不提交
-
-当前容器已安装 Ultralytics 和 PyTorch，并已检测到可用的 NVIDIA GPU。
+- `.script/`：容器内可直接调用的指令
 
 ## 装甲板自定义检测头训练
 

@@ -1,0 +1,5 @@
+# The build only needs the files COPY'd by the Dockerfile; datasets, weights and runs stay out of the context.
+*
+!tools/armorlabel_env/system-deps.sh
+!.script/template/env_setup.bash
+!.script/template/env_setup.zsh

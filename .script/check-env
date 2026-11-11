@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+# Prints the training stack and confirms the GPU is usable. Safe to rerun at any time.
+set -u
+
+status=0
+
+printf '== NVIDIA driver\n'
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader; then
+    :
+else
+    printf 'nvidia-smi failed: the container has no GPU. Check the host driver and NVIDIA Container Toolkit.\n' >&2
+    status=1
+fi
+
+printf '== Python stack\n'
+python3 - <<'PY' || status=1
+import sys
+
+import cv2
+import onnx
+import onnxruntime
+import torch
+import torchvision
+import ultralytics
+
+print(f"python      {sys.version.split()[0]}")
+print(f"torch       {torch.__version__} (CUDA {torch.version.cuda})")
+print(f"torchvision {torchvision.__version__}")
+print(f"ultralytics {ultralytics.__version__}")
+print(f"opencv      {cv2.__version__}")
+print(f"onnx        {onnx.__version__}, onnxruntime {onnxruntime.__version__}")
+
+if not torch.cuda.is_available():
+    sys.exit("torch.cuda.is_available() is False: the driver is probably older than 580 or the GPU is not passed through.")
+
+name = torch.cuda.get_device_name(0)
+major, minor = torch.cuda.get_device_capability(0)
+x = torch.randn(1024, 1024, device="cuda")
+torch.cuda.synchronize()
+print(f"GPU OK      {name} (sm_{major}{minor}), matmul sum={float((x @ x).sum()):.1f}")
+PY
+
+if [ "$status" -eq 0 ]; then
+    printf '== Environment ready\n'
+else
+    printf '== Environment check FAILED, see docs/zh-cn/nvidia_docker_setup.md\n' >&2
+fi
+exit "$status"

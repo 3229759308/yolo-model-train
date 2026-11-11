@@ -1,0 +1,32 @@
+services:
+  yolo-train:
+    # Prebuilt image only: with a build section Dev Containers rebuilds on every open,
+    # which needs the 10 GB base image even when yolo-train was loaded from a tarball.
+    # Build or load it first, see docs/zh-cn/build_docker_image.md.
+    image: yolo-train:latest
+    container_name: yolo-gpu-training
+    init: true
+    command: /bin/sh -c "while sleep 1000; do :; done"
+    network_mode: host
+    shm_size: 8g
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      ALL_PROXY: ${ALL_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      all_proxy: ${all_proxy:-}
+      no_proxy: ${no_proxy:-}
+    volumes:
+      - type: bind
+        source: ..
+        target: /workspace

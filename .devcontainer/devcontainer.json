@@ -1,29 +1,29 @@
-
+// For format details, see https://containers.dev/implementors/json_reference/
 {
   "name": "YOLO GPU Training",
-  "image": "ultralytics/ultralytics:latest",
-  "runArgs": [
-    "--gpus=all",
-    "--shm-size=8g",
-    "--network=host"
+  "dockerComposeFile": [
+    "docker-compose.yml",
+    "docker-compose.local.yml"
   ],
+  "service": "yolo-train",
   "workspaceFolder": "/workspace",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
-  "remoteUser": "root",
-  "containerEnv": {
-    "HTTP_PROXY": "http://127.0.0.1:7897",
-    "HTTPS_PROXY": "http://127.0.0.1:7897",
-    "ALL_PROXY": "http://127.0.0.1:7897",
-    "http_proxy": "http://127.0.0.1:7897",
-    "https_proxy": "http://127.0.0.1:7897",
-    "all_proxy": "http://127.0.0.1:7897",
-    "NO_PROXY": "localhost,127.0.0.1,::1",
-    "no_proxy": "localhost,127.0.0.1,::1"
-  },
+  // Dev Containers remaps ubuntu's UID/GID to the host user, so files in /workspace stay owned by you.
+  "remoteUser": "ubuntu",
+  "initializeCommand": "bash .devcontainer/scripts/ensure-image.sh && bash .devcontainer/scripts/ensure-local-override.sh",
+  "postCreateCommand": "bash .devcontainer/scripts/setup-shell-history.sh && bash .script/check-env",
   "customizations": {
     "vscode": {
+      "settings": {
+        "remote.autoForwardPorts": false,
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "python.defaultInterpreterPath": "/usr/bin/python3"
+      },
       "extensions": [
-        "ms-python.python"
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "redhat.vscode-yaml",
+        "mhutchie.git-graph"
       ]
     }
   }

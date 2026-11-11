@@ -94,6 +94,9 @@ events.out.tfevents.*
 /Ultralytics/
 /.config/Ultralytics/
 
+# opencode per-project plugin state
+.opencode/
+
 # Frontend dependencies and local temporary files
 node_modules/
 /tmp/
