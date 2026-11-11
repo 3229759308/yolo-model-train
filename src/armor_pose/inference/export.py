@@ -2,11 +2,10 @@
 """Export an armor training state dictionary to the fixed 21-channel ONNX API.
 
 Example:
-  /workspace/tools/bit-auto-label/.venv/bin/python src/armor.py export \\
-      --weights results/yolov8n_empty10/best.pt --verify
+  python src/armor.py export --weights results/yolov8n_empty10/best.pt --verify
 
-The existing annotation-tool environment includes ONNX and ONNX Runtime. Export
-does not download pretrained weights or modify the input checkpoint.
+The development container includes ONNX and ONNX Runtime. Export does not
+download pretrained weights or modify the input checkpoint.
 """
 from __future__ import annotations
 
@@ -17,12 +16,10 @@ import tempfile
 
 import torch
 
-from .. import settings
 from ..common.definitions import POINT_NAMES, CLASS_NAMES_EN, COLOR_NAMES_EN
 from ..models import model_from_architecture
 
 
-EXISTING_EXPORT_PYTHON = str(settings.PROJECT_ROOT / 'tools/bit-auto-label/.venv/bin/python')
 DEFAULT_NAMES = CLASS_NAMES_EN
 DEFAULT_COLORS = COLOR_NAMES_EN
 
@@ -37,8 +34,8 @@ def _dependencies(verify: bool):
             ort = None
     except ImportError as exc:
         raise RuntimeError(
-            f"Missing export dependency {exc.name!r}. Use the existing environment: "
-            f"{EXISTING_EXPORT_PYTHON} src/armor.py export --weights CHECKPOINT --verify"
+            f"Missing export dependency {exc.name!r}; install onnx and onnxruntime "
+            "or run inside the development container"
         ) from exc
     return onnx, np, ort
 

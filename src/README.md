@@ -228,10 +228,10 @@ python src/armor.py train \
 
 ## 7. 导出固定接口 ONNX
 
-训练完成后，用已有标注工具虚拟环境中的 ONNX 与 ONNX Runtime 依赖进行导出：
+训练完成后导出（开发容器已包含 ONNX 与 ONNX Runtime）：
 
 ```bash
-/workspace/tools/bit-auto-label/.venv/bin/python src/armor.py export \
+python src/armor.py export \
   --weights results/yolov8n_empty10_e80/best.pt \
   --verify
 ```
@@ -422,6 +422,6 @@ python src/armor.py train --config configs/armor_pose/yolov5n/empty10.yaml
 手动导出：
 
 ```bash
-/workspace/tools/bit-auto-label/.venv/bin/python src/armor.py export \
+python src/armor.py export \
   --weights results/yolov5n_empty10/best.pt --verify
 ```

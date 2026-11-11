@@ -1,4 +1,4 @@
-"""四点装甲板标注桌面工具；独立于 bit-auto-label 的自定义头适配器。"""
+"""四点装甲板标注桌面工具；自定义检测头适配器。"""
 from __future__ import annotations
 
 import argparse

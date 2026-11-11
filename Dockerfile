@@ -21,19 +21,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/*
 
-# Qt/X11 runtime and CJK fonts for the PySide6 labeling tools
-COPY tools/armorlabel_env/system-deps.sh /tmp/system-deps.sh
+# Qt/X11 runtime and CJK fonts for the PySide6 labeling tool
+COPY tools/armor_labeler/system-deps.sh /tmp/system-deps.sh
 RUN bash /tmp/system-deps.sh && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/*
 
 # Extra Python packages used by src/ and tools/ on top of the base image.
-# onnxruntime is the CPU build: export verification is CPU-only, and the GPU wheels
-# on PyPI target CUDA 12, which this CUDA 13 image does not ship.
-RUN pip install --no-cache-dir \
+# onnxruntime-gpu is the CUDA 13 build and loads the CUDA/cuDNN libraries installed with torch.
+# It provides the same module as the CPU onnxruntime package, so the two must never coexist.
+RUN pip uninstall -y onnxruntime && \
+    pip install --no-cache-dir \
     onnx==1.23.2 \
     onnxslim==0.1.99 \
-    onnxruntime==1.31.1 \
+    onnxruntime-gpu==1.31.1 \
     PySide6-Essentials==6.12.0 \
     pytest==9.2.0
 

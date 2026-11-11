@@ -58,6 +58,8 @@ coverage.xml
 /datasets/
 /outputs/
 /weights/
+# Removed ArmorLabel submodule; checkouts made before its removal keep this directory.
+/tools/bit-auto-label/
 
 # Model weights and exported inference models
 *.pt

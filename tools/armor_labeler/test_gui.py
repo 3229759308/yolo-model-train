@@ -1,8 +1,8 @@
 """Offscreen GUI regression tests; no real model or image dataset is required.
 
-Run with the existing desktop environment::
+Run inside the development container::
 
-    QT_QPA_PLATFORM=offscreen ../bit-auto-label/.venv/bin/python -m unittest test_gui -v
+    QT_QPA_PLATFORM=offscreen python3 -m unittest test_gui -v
 """
 from __future__ import annotations
 

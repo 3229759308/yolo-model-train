@@ -24,10 +24,10 @@ docker load -i yolo-train.tar.gz
 
 ### Step 2：克隆并打开仓库
 
-克隆仓库，注意需要使用 `recurse-submodules` 以克隆子模块：
+克隆仓库：
 
 ```bash
-git clone --recurse-submodules https://github.com/3229759308/yolo-model-train.git
+git clone https://github.com/3229759308/yolo-model-train.git
 ```
 
 在 VSCode 中打开仓库：
@@ -61,7 +61,7 @@ check-env
 | torchvision | 0.29.1 |
 | Ultralytics | 8.4.182 |
 | OpenCV（headless） | 5.0 |
-| ONNX / ONNX Runtime（CPU） | 1.23.2 / 1.31.1 |
+| ONNX / ONNX Runtime（GPU） | 1.23.2 / 1.31.1 |
 | PySide6（标注工具界面） | 6.12.0 |
 | opencode | 2.2.5 |
 
@@ -142,22 +142,6 @@ git commit -m "Initialize YOLO training workspace"
 
 网页抽帧与命令行批量抽帧工具位于 `tools/frame_extractor/`。运行方式和参数见 [抽帧工具 README](tools/frame_extractor/README.md)。
 
-## 装甲板标注工具
-
-`tools/bit-auto-label` 是 Git 子模块，包含其自身的 SAM3 子模块。克隆后初始化：
-
-```bash
-git submodule update --init --recursive
-```
-
-环境版本、系统依赖、权重来源与校验值，以及重建步骤记录在 [标注环境 README](tools/armorlabel_env/README.md)。已配置环境后启动：
-
-```bash
-bash tools/armorlabel_env/start.sh
-```
-
-该工具使用独立 Python 环境，以 PySide6 桌面窗口运行。Git 仅保存源码引用、辅助脚本及配置说明；虚拟环境、下载缓存、模型权重和数据集均不提交。
-
 ## 自定义检测头标注工具
 
 `tools/armor_labeler` 提供独立颜色、九类装甲板和四个原图像素关键点标注，支持手工编辑；默认加载 `models/teacher/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，输入 `1×3×480×640`、输出 `1×21×6300`：
@@ -166,4 +150,4 @@ bash tools/armorlabel_env/start.sh
 bash tools/armor_labeler/start.sh --images /workspace/data/raw_image/test
 ```
 
-默认标签写入图片目录旁的 `<目录名>_labels`，可用 `--labels` 指定。随附配置按真实模型的网络输入坐标还原到原图；预处理和输出坐标可在窗口内切换。配置中的模型路径相对配置文件解析，`--model` 可覆盖。工具默认复用 `bit-auto-label/.venv`；详细操作、模型证据、依赖与导出说明见 [工具 README](tools/armor_labeler/README.md)。
+默认标签写入图片目录旁的 `<目录名>_labels`，可用 `--labels` 指定。随附配置按真实模型的网络输入坐标还原到原图；预处理和输出坐标可在窗口内切换。配置中的模型路径相对配置文件解析，`--model` 可覆盖。工具使用容器的 Python 环境，ONNX 预标注默认在 GPU 上运行；详细操作、模型证据、依赖与导出说明见 [工具 README](tools/armor_labeler/README.md)。

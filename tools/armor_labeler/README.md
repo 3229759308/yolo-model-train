@@ -1,6 +1,6 @@
 # 自定义装甲板图片标注工具
 
-参考 `../bit-auto-label` 的四关键点工作流，使用独立的 PySide6 桌面窗口进行人工标注和 ONNX 预标注。颜色分支与装甲板类别分开保存，适配 YOLOv8n-Pose 骨干加自定义检测头。
+使用独立的 PySide6 桌面窗口进行人工标注和 ONNX 预标注。颜色分支与装甲板类别分开保存，适配 YOLOv8n-Pose 骨干加自定义检测头。
 
 已接入工作区真实模型 `models/teacher/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，随附配置默认加载它。该模型的实际输出为**网络输入坐标**，工具会还原成原图像素后供编辑和保存；这与最初描述的“模型直接输出原图坐标”不同，详见下方实测说明。
 
@@ -23,7 +23,7 @@ bash tools/armor_labeler/start.sh \
 
 未指定 `--labels` 时，默认使用图片目录旁的 `<图片目录名>_labels`，例如 `/data/images` 对应 `/data/images_labels`。编辑后约 900 ms 自动保存，切换图片也会保存；无效或损坏的已有 JSON 会显示错误并阻止覆盖，请先修复该文件。
 
-启动脚本优先使用环境变量 `ARMOR_LABELER_PYTHON` 指定的 Python，否则使用 `../bit-auto-label/.venv/bin/python`，最后使用 `python3`。新环境安装：
+启动脚本优先使用环境变量 `ARMOR_LABELER_PYTHON` 指定的 Python，否则使用 `python3`。开发容器的 Python 已包含全部依赖；在容器外使用时可新建环境：
 
 ```bash
 python3 -m venv /workspace/.venv-armor-labeler
@@ -31,9 +31,9 @@ python3 -m venv /workspace/.venv-armor-labeler
 ARMOR_LABELER_PYTHON=/workspace/.venv-armor-labeler/bin/python bash tools/armor_labeler/start.sh
 ```
 
-桌面使用需要可用的 X11 或 Wayland 显示会话；容器或远程终端需带有正确的显示会话环境，例如 `DISPLAY`。无显示环境可运行文末的 offscreen 检查。
+桌面使用需要可用的 X11 或 Wayland 显示会话；容器或远程终端需带有正确的显示会话环境，例如 `DISPLAY`。无显示环境可运行文末的 offscreen 检查。开发镜像构建时已执行 `system-deps.sh` 安装 Qt 图形库与中文字体；其他 Ubuntu 容器需先以 root 执行一次 `bash tools/armor_labeler/system-deps.sh`。
 
-手动标注无需 ONNX Runtime。CPU 预标注可安装 `onnxruntime`；使用 NVIDIA GPU 时安装匹配 CUDA/cuDNN 的 `onnxruntime-gpu`。当前复用环境已安装 GPU 版本，无需重复安装。
+手动标注无需 ONNX Runtime。开发镜像已安装 CUDA 13 版 `onnxruntime-gpu`，直接使用 PyTorch 自带的 CUDA 与 cuDNN 库，预标注默认在 GPU 上运行，无需另装。容器外仅用 CPU 时安装 `onnxruntime`，使用 NVIDIA GPU 时安装与本机 CUDA/cuDNN 匹配的 `onnxruntime-gpu`。
 
 ### 推理后端与 CPU 占用
 
@@ -156,7 +156,7 @@ combined_class cx cy width height x0 y0 2 x1 y1 2 x2 y2 2 x3 y3 2
 
 ```bash
 cd tools/armor_labeler
-QT_QPA_PLATFORM=offscreen ../bit-auto-label/.venv/bin/python -m unittest discover -v -p 'test_*.py'
+QT_QPA_PLATFORM=offscreen python3 -m unittest discover -v -p 'test_*.py'
 QT_QPA_PLATFORM=offscreen bash start.sh --smoke-test
 ```
 
