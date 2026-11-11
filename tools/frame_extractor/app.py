@@ -145,8 +145,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(dict(path=str(path), root=str(ROOT), parent=str(path.parent) if path != ROOT else None,
                                 folders=children, videos=[dict(name=p.name, bytes=p.stat().st_size) for p in videos]))
             elif url.path == '/api/config':
-                default = ROOT / 'data/autoaim_old'
-                self.reply(dict(root=str(ROOT), input=str(default / 'row_video'), output=str(default / 'extractive_image')))
+                self.reply(dict(root=str(ROOT), input=str(ROOT / 'data/videos'), output=str(ROOT / 'data/raw_image')))
             elif url.path in ('/', '/app.js', '/style.css'):
                 name = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
                 body = (HERE / name).read_bytes()

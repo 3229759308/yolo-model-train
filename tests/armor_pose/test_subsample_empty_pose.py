@@ -76,7 +76,7 @@ class EmptySubsetTests(unittest.TestCase):
             self.assertTrue(entry['source_image'].startswith('/original/'))
         self.assertFalse((self.output / 'preparation_report.json').exists())
         self.assertEqual((self.output / 'class_mapping.json').read_bytes(), originals[self.source / 'class_mapping.json'])
-        self.assertEqual(yaml.safe_load((self.output / 'data.yaml').read_text())['path'], str(self.output))
+        self.assertEqual(yaml.safe_load((self.output / 'data.yaml').read_text())['path'], '.')
 
     def test_fixed_seed_is_independent_of_manifest_order_and_preserves_split_groups(self):
         first = subsample_dataset(self.source, self.output, seed=42)

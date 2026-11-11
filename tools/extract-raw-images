@@ -22,14 +22,15 @@ def main():
     parser.add_argument("record", type=Path, help="recording directory, record.raw or record.csv")
     parser.add_argument("--interval", type=positive_int, default=10,
                         help="take one image every N frames, starting at frame 0 (default: 10)")
-    parser.add_argument("--output", type=Path, help="override output directory")
+    parser.add_argument("--output", type=Path,
+                        help="override output directory (default: data/raw_image/<recording directory>)")
     parser.add_argument("--limit", type=positive_int, help="maximum number of images to export")
     args = parser.parse_args()
 
     folder = args.record.resolve()
     if folder.is_file():
         folder = folder.parent
-    output = args.output or Path(__file__).resolve().parent.parent / "raw_image" / folder.name
+    output = args.output or Path(__file__).resolve().parents[1] / "data/raw_image" / folder.name
     required = {"raw_offset_bytes", "raw_size_bytes", "width", "height", "opencv_cvt_color_code"}
     count = 0
     with (folder / "record.raw").open("rb") as raw, \
@@ -59,7 +60,8 @@ def main():
             bayer = np.frombuffer(data, dtype=np.uint8).reshape(height, width)
             image = cv2.demosaicing(bayer, code)
             # Exclusive creation prevents overwriting earlier exports or annotations.
-            path = output / f"{index:08d}.png"
+            # prepare splits train/val by the <recording>_f<frame> name.
+            path = output / f"{folder.name}_f{index:07d}.png"
             ok, encoded = cv2.imencode(".png", image)
             if not ok:
                 raise RuntimeError(f"frame {index}: PNG encoding failed")

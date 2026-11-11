@@ -1,8 +1,9 @@
 # Custom head: independent color[4], class[9], XY[8]. No 36-class conversion.
+# Paths are relative to the repository root; training writes runs/<name> and results/<name>.
 model: yolov8n-armor-pose
-data: /workspace/datasets/armor_pose_custom/data.yaml
-output: /workspace/runs/armor_pose_custom/train
-backbone_weights: /workspace/weights/yolov8n-pose.pt
+name: yolov8n_default
+data: data/datasets/armor_pose_custom/data.yaml
+backbone_weights: models/pretrained/yolov8n-pose.pt
 from_scratch: false
 input_size: [480, 640]
 device: '0'

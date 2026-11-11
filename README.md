@@ -81,12 +81,28 @@ PYTHONPATH=src python -m unittest discover -s tests -t .
 
 ## 目录约定
 
-- `src/`：训练、验证和推理代码
-- `configs/`：模型及数据集 YAML 配置，可提交到 Git
-- `data/` 或 `datasets/`：本地数据集，不提交
-- `weights/`：预训练权重，不提交
-- `runs/`：训练结果，不提交
-- `.script/`：容器内可直接调用的指令
+目录按数据流划分：
+
+```text
+data/                 ① 训练数据
+├── videos/           录像，抽帧工具的默认输入
+├── raw_image/        抽帧图片
+├── raw_image_labels/ 标注工具保存的 JSON 标签
+├── exports/          标注导出（manifest + TXT），prepare 的输入
+├── datasets/         prepare / subsample 生成的训练数据集
+└── reports/          数据检查报告
+models/               ② 模型权重
+├── pretrained/       预训练骨干
+└── teacher/          标注工具使用的教师 ONNX
+src/                  ③ 训练、验证、推理与导出代码
+configs/              ④ 训练与数据集 YAML 配置
+runs/<实验名>/        ⑤ 训练过程文件：args.yaml、results.csv、last.pt、日志
+results/<实验名>/     ⑥ 结果：best.pt、best.onnx、指标、对比评估、推理输出
+```
+
+`src/`、`configs/` 提交到 Git；`data/`、`models/`、`runs/`、`results/` 只保存在本地。实验名取自训练配置的 `name`，`runs/` 与 `results/` 下的同名目录属于同一次实验；`runs/<实验名>` 只用于续训和排查，确认结果后可以删除。
+
+其余目录：`tools/` 为抽帧与标注工具，`tests/` 为单元测试，`docs/` 为环境配置文档，`.script/` 为容器内可直接调用的指令。
 
 ## 装甲板自定义检测头训练
 
@@ -97,9 +113,9 @@ python src/armor.py models
 python src/armor.py train --config configs/armor_pose/yolov8n/empty10.yaml
 ```
 
-`empty10.yaml` 使用保留原空图 10% 的数据集；完整原数据配置为 [default.yaml](configs/armor_pose/yolov8n/default.yaml)。数据、网络、损失、训练和部署实现分在 `src/armor_pose/` 对应子包，配置按骨干放在 `configs/armor_pose/`。准备、空图抽样、验证、预测、导出、目录树和学习顺序见 [训练与代码说明](src/README.md)。
+`empty10.yaml` 使用保留原空图 10% 的数据集；完整原数据配置为 [default.yaml](configs/armor_pose/yolov8n/default.yaml)。数据、网络、损失、训练和部署实现分在 `src/armor_pose/` 对应子包，配置按骨干放在 `configs/armor_pose/`。训练过程文件写入 `runs/<name>/`，结果写入 `results/<name>/`，`name` 取自配置；同名实验已存在时拒绝覆盖，可用 `--name` 另起实验名。准备、空图抽样、验证、预测、导出、目录树和学习顺序见 [训练与代码说明](src/README.md)。
 
-目前可训练模型为 `yolov8n-armor-pose` / `yolov8n` 和原版 v7.0 的 `yolov5n-armor-pose` / `yolov5n`；YOLO26 尚未实现。两个已实现模型共享独立颜色、类别和四点头，旧 CLI 与 YAML 路径保留兼容。
+目前可训练模型为 `yolov8n-armor-pose` / `yolov8n` 和原版 v7.0 的 `yolov5n-armor-pose` / `yolov5n`；YOLO26 尚未实现。两个已实现模型共享独立颜色、类别和四点头。
 
 YOLOv5n 对照训练：
 
@@ -144,7 +160,7 @@ bash tools/armorlabel_env/start.sh
 
 ## 自定义检测头标注工具
 
-`tools/armor_labeler` 提供独立颜色、九类装甲板和四个原图像素关键点标注，支持手工编辑；默认加载 `weights/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，输入 `1×3×480×640`、输出 `1×21×6300`：
+`tools/armor_labeler` 提供独立颜色、九类装甲板和四个原图像素关键点标注，支持手工编辑；默认加载 `models/teacher/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，输入 `1×3×480×640`、输出 `1×21×6300`：
 
 ```bash
 bash tools/armor_labeler/start.sh --images /workspace/data/raw_image/test

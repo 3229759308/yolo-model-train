@@ -74,6 +74,10 @@ class ArmorDatasetTests(PrepareFixture):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 ArmorPoseDataset(self.data, **kwargs)
 
+    def test_prepared_dataset_loads_after_being_moved(self):
+        moved = self.output.rename(self.root / 'moved')
+        self.assertEqual(len(ArmorPoseDataset(moved / 'data.yaml', split='val')), 2)
+
     def test_validation_never_augments(self):
         dataset = ArmorPoseDataset(self.data, split='val', augment=True)
         with patch('armor_pose.data.dataset.random.uniform', side_effect=AssertionError('validation must not augment')):

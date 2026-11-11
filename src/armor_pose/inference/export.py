@@ -3,7 +3,7 @@
 
 Example:
   /workspace/tools/bit-auto-label/.venv/bin/python src/armor.py export \\
-      --weights runs/armor_pose/best.pt --verify
+      --weights results/yolov8n_empty10/best.pt --verify
 
 The existing annotation-tool environment includes ONNX and ONNX Runtime. Export
 does not download pretrained weights or modify the input checkpoint.

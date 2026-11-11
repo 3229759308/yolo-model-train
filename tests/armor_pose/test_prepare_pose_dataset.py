@@ -73,6 +73,7 @@ class PrepareTests(PrepareFixture):
         for source, data in before.items():
             self.assertEqual(source.read_bytes(), data)
         config = yaml.safe_load((self.output / 'data.yaml').read_text())
+        self.assertEqual(config['path'], '.')
         self.assertEqual(config['names'], dict(enumerate(CLASS_NAMES_EN)))
         self.assertEqual(config['nc'], 9)
         self.assertEqual(config['ncolor'], 4)

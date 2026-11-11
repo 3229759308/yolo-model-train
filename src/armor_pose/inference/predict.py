@@ -2,8 +2,8 @@
 """Predict original-image four-corner armor labels from a custom checkpoint.
 
 Example:
-  python src/armor.py predict --weights runs/armor_pose/best.pt \\
-      --source /workspace/data/raw_image --device 0 --save-images
+  python src/armor.py predict --weights results/yolov8n_empty10/best.pt \\
+      --source data/raw_image --device 0 --save-images
 
 Each labels/*.jpg.txt row is color_id class_id followed by LT/LB/RB/RT x,y
 coordinates in source-image pixels. Image files and checkpoints are read only;
@@ -24,11 +24,9 @@ import numpy as np
 import torch
 
 from ..common.definitions import POINT_NAMES as _POINT_NAMES
-from ..settings import OUTPUTS_DIR
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
-DEFAULT_OUTPUT = OUTPUTS_DIR / 'armor_pose_predictions'
 POINT_NAMES = list(_POINT_NAMES)
 PREVIEW_COLORS = [(255, 100, 30), (70, 70, 255), (240, 240, 240), (220, 80, 220)]
 
@@ -101,7 +99,7 @@ def _preview(image: np.ndarray, prediction: dict) -> np.ndarray:
 def predict(
     weights: str | Path,
     source: str | Path,
-    output: str | Path = DEFAULT_OUTPUT,
+    output: str | Path | None = None,
     device: str = "0",
     confidence: float = .25,
     nms_iou: float = .5,
@@ -116,7 +114,7 @@ def predict(
         raise ValueError("iou must be in [0, 1]")
     weights = Path(weights).expanduser().resolve(strict=True)
     source = Path(source).expanduser().resolve(strict=True)
-    output = Path(output).expanduser().resolve()
+    output = Path(output).expanduser().resolve() if output else weights.parent / "predictions"
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError(f"Output must be new or an empty directory: {output}")
     image_root, images = _images(source)
@@ -192,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--weights", required=True, type=Path)
     parser.add_argument("--source", required=True, type=Path, help="One image or a recursively scanned image directory")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--output", type=Path, help="New or empty directory (default: predictions/ beside the checkpoint)")
     parser.add_argument("--device", default="0", help="0, cuda:0, or cpu")
     parser.add_argument("--conf", type=float, default=.25, help="Color probability times class probability")
     parser.add_argument("--iou", type=float, default=.5, help="NMS IoU threshold per color/class pair")

@@ -60,23 +60,19 @@ original_y = (network_y - padding_top) / scale_y
 
 ## 3. 准备数据集
 
-在 `/workspace` 下执行。训练使用当前全局 Python 环境中的 Torch、Ultralytics、OpenCV、NumPy、Pillow 和 PyYAML。骨干预训练权重从本地 `/workspace/weights/yolov8n-pose.pt` 加载，不需要下载教师模型。当前数据集已经准备完成，可直接进入训练；下面的 prepare 命令用于准备新导出，已有输出目录会拒绝覆盖。
+在 `/workspace` 下执行。训练使用当前全局 Python 环境中的 Torch、Ultralytics、OpenCV、NumPy、Pillow 和 PyYAML。骨干预训练权重从本地 `models/pretrained/yolov8n-pose.pt` 加载，不需要下载教师模型。当前数据集已经准备完成，可直接进入训练；下面的 prepare 命令用于准备新导出，已有输出目录会拒绝覆盖。
 
 ```bash
 cd /workspace
-python src/armor.py prepare
+python src/armor.py prepare --export data/exports/<导出目录>
 ```
 
-默认读取：
-
-```text
-/workspace/data/raw_image_label_end/armor_export_20261023_071657_908993
-```
+`--export` 必填，指向标注工具的导出目录（含 `manifest.json`），导出统一放在 `data/exports/`。现有数据集来自 `armor_export_20261023_071657_908993`，这份导出已不在工作区，来源记录在数据集的 `split_manifest.json` 中。
 
 默认输出：
 
 ```text
-/workspace/datasets/armor_pose_custom
+data/datasets/armor_pose_custom
 ├── data.yaml
 ├── images/train/...
 ├── images/val/...
@@ -86,6 +82,8 @@ python src/armor.py prepare
 ├── preparation_report.json
 └── split_manifest.json
 ```
+
+`data.yaml` 中的 `path: .` 表示数据集就是它所在的目录，整个目录可以移动或随仓库挂到其他位置。
 
 每个标签目标是一行 10 列，没有 bbox、归一化坐标或可见性列：
 
@@ -111,12 +109,13 @@ color_id class_id x_LT y_LT x_LB y_LB x_RB y_RB x_RT y_RT
 
 ```bash
 python src/armor.py prepare \
-  --export /workspace/data/raw_image_label_end/armor_export_20261023_071657_908993 \
-  --output /workspace/datasets/armor_pose_custom_v2 \
+  --export data/exports/<导出目录> \
+  --output data/datasets/armor_pose_custom_v2 \
   --val-ratio 0.2 --seed 42
 
 python src/armor.py prepare \
-  --output /workspace/datasets/armor_pose_custom_explicit \
+  --export data/exports/<导出目录> \
+  --output data/datasets/armor_pose_custom_explicit \
   --val-groups infantry_bisai_2 infantry_bisai_7 sentry_bisai_2
 ```
 
@@ -132,12 +131,14 @@ python src/armor.py train --config configs/armor_pose/yolov8n/empty10.yaml
 
 完整原数据集的默认配置是 [`configs/armor_pose/yolov8n/default.yaml`](../configs/armor_pose/yolov8n/default.yaml)，省略 `--config` 时使用它。数据描述位于准备后目录的 `data.yaml`；[`configs/armor_pose/datasets/armor.yaml`](../configs/armor_pose/datasets/armor.yaml) 是相同自定义数据结构的静态配置。两个训练配置都指定 `model: yolov8n-armor-pose`。
 
-显式指定输出目录和训练规模：
+每个训练配置的 `name` 就是实验名：训练过程文件写入 `runs/<name>/`，结果写入 `results/<name>/`。配置文件里的相对路径从仓库根目录解析；命令行传入的路径按当前目录解析。
+
+显式指定实验名和训练规模：
 
 ```bash
 python src/armor.py train \
   --config configs/armor_pose/yolov8n/empty10.yaml \
-  --output /workspace/runs/armor_pose_custom/train_v1 \
+  --name yolov8n_empty10_e80 \
   --epochs 80 --batch 8
 ```
 
@@ -163,7 +164,7 @@ python src/armor.py train \
 
 默认加载 COCO `yolov8n-pose.pt` 的骨干与 neck，替换并重新初始化检测头，随后联合训练。不会把原教师 ONNX 当成可续训的 Torch checkpoint。若确实要从随机权重开始，可使用 `--from-scratch`。
 
-输出目录非空时新训练会拒绝覆盖。新实验请换一个 `--output`；显存不足时可减小 `--batch`，排查数据加载问题时可设 `--workers 0`。
+`runs/<name>` 或 `results/<name>` 非空时新训练会拒绝覆盖，新实验请换一个 `--name`；显存不足时可减小 `--batch`，排查数据加载问题时可设 `--workers 0`。
 
 ## 5. 小规模流程检查
 
@@ -171,49 +172,57 @@ python src/armor.py train \
 
 ```bash
 python src/armor.py train \
-  --output /workspace/runs/armor_pose_custom/smoke_check \
+  --name smoke_check \
   --epochs 1 --batch 8 --workers 0 \
   --max-train-images 64 --max-val-images 32
 ```
 
-小规模检查会尽量同时取有目标和空标签图片。这里的图片数量限制只用于验证训练流程；模型质量应通过完整训练评估。重新开始完整训练时使用新的输出目录，并保持两个 `max_*_images` 为 0。
+小规模检查会尽量同时取有目标和空标签图片。这里的图片数量限制只用于验证训练流程；模型质量应通过完整训练评估。检查完成后删除 `runs/smoke_check` 和 `results/smoke_check`；重新开始完整训练时使用新的实验名，并保持两个 `max_*_images` 为 0。
 
 ## 6. 结果、续训与独立验证
 
-每个实验目录包含：
+同一实验的文件按用途分在两个同名目录：
 
-| 文件 | 用途 |
-| --- | --- |
-| `args.yaml` | 本次实际使用的配置 |
-| `results.csv` | 每个 epoch 的损失、验证指标、学习率和耗时 |
-| `metrics.json` | 最近一次验证指标和逐类别结果 |
-| `best.pt` | 按验证 mAP50-95 选出的最佳模型，用于推理、验证和导出 |
-| `last.pt` | 最近模型，包含优化器、scaler 和随机状态，用于续训 |
+| 位置 | 文件 | 用途 |
+| --- | --- | --- |
+| `runs/<name>/` | `args.yaml` | 本次实际使用的配置 |
+| | `results.csv` | 每个 epoch 的损失、验证指标、学习率和耗时 |
+| | `metrics.json` | 最近一轮的验证指标和逐类别结果 |
+| | `last.pt` | 最近模型，包含优化器、scaler 和随机状态，用于续训 |
+| | `job/` | 后台任务的脚本、状态与日志（如有） |
+| `results/<name>/` | `best.pt` | 按验证 mAP50-95 选出的最佳模型，用于推理、验证和导出 |
+| | `metrics.json` | `best.pt` 对应轮次的验证指标和逐类别结果 |
+| | `args.yaml` | 配置副本，只看结果目录也能知道训练方式 |
+| | `best.onnx`、`predictions/` | 导出与推理的默认输出位置 |
+
+`runs/<name>/` 只用于续训和排查，确认结果后可以删除以腾出空间，删除后无法续训；`results/<name>/` 是需要保留的产物。
 
 从 `last.pt` 续训，`--epochs` 指总训练轮数：
 
 ```bash
 python src/armor.py train \
-  --resume /workspace/runs/armor_pose_custom/train_v1/last.pt \
+  --resume runs/yolov8n_empty10_e80/last.pt \
   --epochs 100
 ```
 
-续训优先读取 checkpoint 保存的训练配置，默认继续写入该 checkpoint 所在目录；只有显式传入的配置或命令行参数会覆盖。`best.pt` 不保存优化器状态，不能用作 `--resume`。随机状态会恢复，但多 worker 的随机亮度增强不保证逐位复现。
+续训优先读取 checkpoint 保存的训练配置，实验名固定为 `last.pt` 所在目录名，继续写入该目录和同名的 `results/<name>/`，因此 `--resume` 不能与 `--name` 同时使用；其他显式传入的配置或命令行参数会覆盖。`best.pt` 不保存优化器状态，不能用作 `--resume`。随机状态会恢复，但多 worker 的随机亮度增强不保证逐位复现。
 
 只验证，不进行训练：
 
 ```bash
 python src/armor.py train \
-  --validate /workspace/runs/armor_pose_custom/train_v1/best.pt
+  --validate results/yolov8n_empty10_e80/best.pt
 ```
 
 如果 checkpoint 来自小规模检查，而这次希望评估完整验证集，显式清除数量限制：
 
 ```bash
 python src/armor.py train \
-  --validate /workspace/runs/armor_pose_custom/smoke_check/best.pt \
+  --validate results/smoke_check/best.pt \
   --max-val-images 0
 ```
+
+目录调整前训练的三个实验（`yolov8n_default`、`yolov8n_empty10`、`yolov5n_empty10`）的 checkpoint 记录的是旧的数据集路径，验证或续训时需要显式传 `--data`，例如 `--data data/datasets/armor_pose_custom_empty10/data.yaml`；不传会提示数据文件不存在。
 
 `mAP50`、`mAP50_95` 根据四点外接框计算，并要求颜色和类别同时匹配。`corner_error_input_px` 是 IoU≥0.5 的正确匹配目标上的平均角点误差，单位为 letterbox 后的网络输入像素；没有匹配时为 `null`。这些不是人体 Pose 的 OKS 指标。验证集没有的类别不会贡献该次 mAP，结合 `per_color_class` 和数据划分报告阅读结果。
 
@@ -223,12 +232,11 @@ python src/armor.py train \
 
 ```bash
 /workspace/tools/bit-auto-label/.venv/bin/python src/armor.py export \
-  --weights /workspace/runs/armor_pose_custom/train_v1/best.pt \
-  --output /workspace/runs/armor_pose_custom/train_v1/best.onnx \
+  --weights results/yolov8n_empty10_e80/best.pt \
   --verify
 ```
 
-默认在 CPU 上导出。`--verify` 会检查 ONNX 合法性、固定输入输出形状，并用同一输入比较 Torch 和 ONNX Runtime 的输出。ONNX 记录颜色、类别、点序、letterbox 以及网络输入像素坐标等 metadata；导出不包括 NMS。
+默认写到 checkpoint 旁边的同名 `.onnx`，即 `results/yolov8n_empty10_e80/best.onnx`；默认在 CPU 上导出。`--verify` 会检查 ONNX 合法性、固定输入输出形状，并用同一输入比较 Torch 和 ONNX Runtime 的输出。ONNX 记录颜色、类别、点序、letterbox 以及网络输入像素坐标等 metadata；导出不包括 NMS。
 
 在图片标注工具中加载新 ONNX 时选择 **letterbox、RGB、除以 255、输入 640×480、输出坐标为网络输入像素**，由工具还原为原图坐标。
 
@@ -238,11 +246,12 @@ python src/armor.py train \
 
 ```bash
 python src/armor.py predict \
-  --weights /workspace/runs/armor_pose_custom/train_v1/best.pt \
-  --source /workspace/data/raw_image \
-  --output /workspace/outputs/armor_pose_predictions \
+  --weights results/yolov8n_empty10_e80/best.pt \
+  --source data/raw_image \
   --conf 0.25 --iou 0.5 --save-images
 ```
+
+默认输出到 checkpoint 旁边的 `predictions/`，即 `results/yolov8n_empty10_e80/predictions/`；输出目录必须是新目录或空目录，再次推理请用 `--output` 另行指定。
 
 后处理分别选择最高颜色与类别得分，最终置信度为：
 
@@ -283,7 +292,7 @@ src/
 └── armor_pose/
     ├── __init__.py
     ├── __main__.py                  # python -m armor_pose
-    ├── settings.py                  # 项目根目录及 data/weights/runs 等位置
+    ├── settings.py                  # 项目根目录及 data/models/runs/results 等位置
     ├── common/
     │   ├── definitions.py           # 类别、颜色、点序等共同定义
     │   ├── head.py                  # 4 + 9 + 8 自定义检测头
@@ -307,6 +316,8 @@ src/
 configs/
 └── armor_pose/
     ├── datasets/armor.yaml
+    ├── yolov5n/
+    │   └── empty10.yaml            # YOLOv5n 对照实验
     └── yolov8n/
         ├── default.yaml            # 完整原数据集
         └── empty10.yaml            # 空图保留原数量 10%
@@ -343,19 +354,9 @@ tests/
 PYTHONPATH=src python -m unittest discover -s tests -t .
 ```
 
-旧的五个命令行脚本保留为薄包装，已有启动命令仍可用；实际实现统一位于上面的包目录：
+命令行只保留统一入口 `python src/armor.py`；旧的 `src/train_armor_pose.py` 等五个脚本和 `configs/train_armor_pose.yaml` 等旧配置路径已删除，代码调用请用 `armor_pose.data`、`armor_pose.models`、`armor_pose.common` 等包路径。
 
-| 旧 CLI | 对应统一命令 |
-| --- | --- |
-| `src/prepare_pose_dataset.py` | `python src/armor.py prepare` |
-| `src/subsample_empty_pose.py` | `python src/armor.py subsample` |
-| `src/train_armor_pose.py` | `python src/armor.py train` |
-| `src/predict_armor_pose.py` | `python src/armor.py predict` |
-| `src/export_armor_pose.py` | `python src/armor.py export` |
-
-旧的顶层核心模块 import 路径不再保留；代码调用请改用 `armor_pose.data`、`armor_pose.models`、`armor_pose.common` 等包路径。旧配置 `configs/train_armor_pose.yaml`、`configs/train_armor_pose_empty10.yaml`、`configs/autoaim_pose.yaml` 分别以相对符号链接指向新的 default、empty10 和数据集配置，保持旧命令与既有配置路径兼容。
-
-源数据、复制后的数据集、权重、ONNX 和运行输出均放在现有忽略目录内。提交代码时只提交源码、配置与说明，保留数据和模型在本地。
+源数据与数据集、权重、训练过程文件和结果分别位于 `data/`、`models/`、`runs/`、`results/`，均不提交 Git。提交代码时只提交源码、配置与说明，保留数据和模型在本地。
 
 ## 10. 空标签图片保留原来的 10% 后重训
 
@@ -368,14 +369,14 @@ python src/armor.py train --config configs/armor_pose/yolov8n/empty10.yaml
 
 本次从 8989 张空图中保留 899 张，2665 张有目标图片和 3949 个目标全部保留。新数据集共 3564 张：训练 2871 张（正图 2154、空图 717），验证 693 张（正图 511、空图 182）。空图占新数据集约 25.22%；这里的 10% 是相对于原空图数量的保留比例。
 
-数据位于 `datasets/armor_pose_custom_empty10`，抽样明细在其 `subsampling_report.json` 和 `split_manifest.json`。新训练使用本地 COCO 预训练骨干、重新初始化自定义头，配置为 100 轮、batch 8、早停 20；结果写入 `runs/armor_pose_custom/train_empty10`。
+数据位于 `data/datasets/armor_pose_custom_empty10`，抽样明细在其 `subsampling_report.json` 和 `split_manifest.json`。新训练使用本地 COCO 预训练骨干、重新初始化自定义头，配置为 100 轮、batch 8、早停 20；过程文件在 `runs/yolov8n_empty10`，结果在 `results/yolov8n_empty10`。
 
 验证集也减少了空图，本轮验证 mAP 与旧实验直接对比时评估图片集合不同。正式对比应让两个模型都在原完整验证集上评估，例如对新 checkpoint 执行：
 
 ```bash
 python src/armor.py train \
-  --validate /workspace/runs/armor_pose_custom/train_empty10/best.pt \
-  --data /workspace/datasets/armor_pose_custom/data.yaml \
+  --validate results/yolov8n_empty10/best.pt \
+  --data data/datasets/armor_pose_custom/data.yaml \
   --max-val-images 0
 ```
 
@@ -412,15 +413,15 @@ python src/armor.py train \
 python src/armor.py train --config configs/armor_pose/yolov5n/empty10.yaml
 ```
 
-配置使用空图保留原 10% 的数据：训练 2871 张、验证 693 张，100 轮、batch 8、早停 20、seed 42、AdamW lr=0.001。加载本地 `weights/yolov5n.pt` 的 COCO 预训练骨干，严格校验所有骨干张量，重新初始化装甲板头。权重缺失或形状不符会报错；显式 `--from-scratch` 才使用随机骨干。
+配置使用空图保留原 10% 的数据：训练 2871 张、验证 693 张，100 轮、batch 8、早停 20、seed 42、AdamW lr=0.001。加载本地 `models/pretrained/yolov5n.pt` 的 COCO 预训练骨干，严格校验所有骨干张量，重新初始化装甲板头。权重缺失或形状不符会报错；显式 `--from-scratch` 才使用随机骨干。
 
 官方预训练文件来自 [YOLOv5 v7.0](https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n.pt)，不是 YOLOv5u。骨干实现和权重来源见 [YOLOv5 说明](armor_pose/models/yolov5/README.md)。
 
-结果保存到 `runs/armor_pose_custom/yolov5n_empty10`。本次后台任务的日志在 `outputs/armor_pose_yolov5n_job/training.log`；任务完成后会自动导出并校验 `best.onnx`，再使用原完整验证集复评，与 YOLOv8n 的同集结果保存在 `comparison_original_val.json`。
+过程文件在 `runs/yolov5n_empty10`，后台任务的脚本和日志在其 `job/` 下（训练日志为 `job/training.log`）；结果在 `results/yolov5n_empty10`。任务完成后会自动导出并校验 `best.onnx`，再使用原完整验证集复评，与 YOLOv8n 的同集结果保存在 `results/yolov5n_empty10/comparison_original_val.json`。
 
 手动导出：
 
 ```bash
 /workspace/tools/bit-auto-label/.venv/bin/python src/armor.py export \
-  --weights /workspace/runs/armor_pose_custom/yolov5n_empty10/best.pt --verify
+  --weights results/yolov5n_empty10/best.pt --verify
 ```

@@ -45,16 +45,19 @@ coverage.xml
 /.ssh/
 .netrc
 
-# Local datasets, annotations, extracted frames and training outputs
+# Local data, model weights, training process files and results
 # Keep YAML dataset definitions in configs/, outside these directories.
 /data/
-/datasets/
+/models/
 /runs/
-/outputs/
-/weights/
+/results/
 /checkpoints/
 /artifacts/
 /exports/
+# Locations used before the data-flow layout; ignored so unmigrated local copies are never committed.
+/datasets/
+/outputs/
+/weights/
 
 # Model weights and exported inference models
 *.pt

@@ -36,7 +36,7 @@ python tools/frame_extractor/app.py --root /mnt/data --port 7860
 python /workspace/tools/frame_extractor/batch_extract.py
 ```
 
-默认递归扫描 `/workspace/data/infantry` 和 `/workspace/data/sentry` 的 AVI，
+默认递归扫描 `/workspace/data/videos/infantry` 和 `/workspace/data/videos/sentry` 的 AVI，
 抽取第 0、30、60… 帧，以原始分辨率、95 的 JPG 质量保存到 `/workspace/data/raw_image`。
 文件名如 `infantry_bisai_1_f0000030.jpg`、`sentry_bisai_1_f0000030.jpg`，
 包括来源目录、视频名与从 0 开始的原视频帧序号。子目录名也会加入文件名；重名冲突会在处理前报错。
@@ -47,6 +47,6 @@ python /workspace/tools/frame_extractor/batch_extract.py
 
 ```bash
 python /workspace/tools/frame_extractor/batch_extract.py \
-  --input /workspace/data/infantry /workspace/data/sentry \
+  --input /workspace/data/videos/infantry /workspace/data/videos/sentry \
   --output /workspace/data/raw_image --step 30 --workers 4 --quality 95
 ```

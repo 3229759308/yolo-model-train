@@ -105,7 +105,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--input", nargs="+", type=Path,
-        default=[ROOT / "data/infantry", ROOT / "data/sentry"],
+        default=[ROOT / "data/videos/infantry", ROOT / "data/videos/sentry"],
         help="一个或多个输入目录，递归扫描 AVI（含大写扩展名）",
     )
     parser.add_argument("--output", type=Path, default=ROOT / "data/raw_image")

@@ -18,7 +18,7 @@ from ...common.head import ArmorPoseHead
 from ultralytics.nn.modules import Bottleneck, C3, Concat, Conv, SPPF
 
 
-DEFAULT_BACKBONE_WEIGHTS = settings.WEIGHTS_DIR / 'yolov5n.pt'
+DEFAULT_BACKBONE_WEIGHTS = settings.PRETRAINED_DIR / 'yolov5n.pt'
 
 
 class _V5Unpickler(pickle.Unpickler):

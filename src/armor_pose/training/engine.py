@@ -21,9 +21,10 @@ import yaml
 from ..data.dataset import ArmorPoseDataset, armor_collate
 from ..common.loss import ArmorPoseLoss
 from ..models import build_model, MODEL_ALIASES, DEFAULT_MODEL
-from ..settings import DEFAULT_TRAIN_CONFIG
+from ..settings import DEFAULT_TRAIN_CONFIG, RESULTS_DIR, RUNS_DIR, project_path
 
 DEFAULT_CONFIG = DEFAULT_TRAIN_CONFIG
+PATH_KEYS = ('data', 'backbone_weights')
 
 
 def limited_dataset(dataset, maximum):
@@ -41,7 +42,7 @@ def limited_dataset(dataset, maximum):
 
 
 def make_loader(config, split, device, maximum=0):
-    dataset = ArmorPoseDataset(config['data'], split=split, input_size=tuple(config['input_size']),
+    dataset = ArmorPoseDataset(project_path(config['data']), split=split, input_size=tuple(config['input_size']),
                                augment=(split == 'train'), brightness=config['brightness'])
     dataset = limited_dataset(dataset, maximum)
     generator = torch.Generator().manual_seed(config['seed'])
@@ -102,10 +103,13 @@ def run_training(config, resume=None):
         device = torch.device(f'cuda:{requested}' if requested.isdigit() else ('cuda:0' if requested == 'cuda' else requested))
     if config['input_size'] != [480, 640]:
         raise ValueError('This deployment uses fixed input_size [480,640]')
-    output = Path(config['output']).resolve()
-    if output.exists() and any(output.iterdir()) and not resume:
-        raise FileExistsError(f'Run directory is not empty: {output}; choose --output or use --resume')
-    output.mkdir(parents=True, exist_ok=True)
+    run_dir = Path(resume).resolve().parent if resume else RUNS_DIR / config['name']
+    results_dir = RESULTS_DIR / config['name']
+    for directory in (run_dir, results_dir):
+        if directory.exists() and any(directory.iterdir()) and not resume:
+            raise FileExistsError(f'Experiment directory is not empty: {directory}; choose another --name or use --resume')
+    for directory in (run_dir, results_dir):
+        directory.mkdir(parents=True, exist_ok=True)
     train_loader = make_loader(config, 'train', device, config['max_train_images'])
     val_loader = make_loader(config, 'val', device, config['max_val_images'])
     if not len(train_loader.dataset) or not len(val_loader.dataset):
@@ -121,7 +125,7 @@ def run_training(config, resume=None):
             raise ValueError('The selected model differs from the resume checkpoint architecture; start a new experiment')
     else:
         model = build_model(config.get('model', 'yolov8n-armor-pose'),
-                            backbone_weights=config['backbone_weights'],
+                            backbone_weights=project_path(config['backbone_weights']),
                             pretrained=not config['from_scratch']).to(device)
         previous = {}
     criterion = ArmorPoseLoss(**config['loss'])
@@ -146,10 +150,11 @@ def run_training(config, resume=None):
             torch.cuda.set_rng_state_all([state.cpu() for state in rng['cuda']])
     if start >= config['epochs']:
         raise ValueError(f'Checkpoint already reached epoch {start}; increase --epochs')
-    with open(config['data'], encoding='utf-8') as stream:
+    with open(project_path(config['data']), encoding='utf-8') as stream:
         data_config = yaml.safe_load(stream)
-    with open(output / 'args.yaml', 'w', encoding='utf-8') as stream:
-        yaml.safe_dump(config, stream, allow_unicode=True, sort_keys=False)
+    for directory in (run_dir, results_dir):
+        with open(directory / 'args.yaml', 'w', encoding='utf-8') as stream:
+            yaml.safe_dump(config, stream, allow_unicode=True, sort_keys=False)
     print('epoch train_loss val_loss mAP50 mAP50_95 seconds', flush=True)
     for epoch in range(start, config['epochs']):
         begun = time.monotonic()
@@ -196,44 +201,47 @@ def run_training(config, resume=None):
                       'data_config': data_config, 'config': config, 'epoch': epoch,
                       'best_fitness': best, 'best_epoch': best_epoch, 'metrics': result}
         if improved:
-            atomic_checkpoint(checkpoint, output / 'best.pt')
+            atomic_checkpoint(checkpoint, results_dir / 'best.pt')
+            (results_dir / 'metrics.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
         numpy_rng = np.random.get_state()
         rng_state = {'python': random.getstate(), 'torch': torch.get_rng_state(),
                      'numpy': (numpy_rng[0], numpy_rng[1].tolist(), *numpy_rng[2:]),
                      'loader': train_loader.generator.get_state(),
                      'cuda': torch.cuda.get_rng_state_all() if device.type == 'cuda' else []}
         atomic_checkpoint({**checkpoint, 'optimizer_state_dict': optimizer.state_dict(),
-                           'scaler_state_dict': scaler.state_dict(), 'rng_state': rng_state}, output / 'last.pt')
+                           'scaler_state_dict': scaler.state_dict(), 'rng_state': rng_state}, run_dir / 'last.pt')
         row = {'epoch': epoch + 1, **{f'train_{k}': v / count for k, v in totals.items()},
                **{f'val_{k}': v for k, v in result.items() if isinstance(v, (float, int)) or v is None},
                'lr': optimizer.param_groups[0]['lr'], 'seconds': time.monotonic() - begun}
-        csv_path = output / 'results.csv'
+        csv_path = run_dir / 'results.csv'
         new_file = not csv_path.exists()
         with csv_path.open('a', newline='') as stream:
             writer = csv.DictWriter(stream, fieldnames=list(row))
             if new_file:
                 writer.writeheader()
             writer.writerow(row)
-        (output / 'metrics.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+        (run_dir / 'metrics.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
         print(f'{epoch + 1} {row["train_loss"]:.4f} {result["loss"]:.4f} {result["mAP50"]:.4f} {result["mAP50_95"]:.4f} {row["seconds"]:.1f}', flush=True)
         if config['patience'] > 0 and epoch - best_epoch >= config['patience']:
             print(f'Early stop: no improvement for {config["patience"]} epochs', flush=True)
             break
-    print(f'Saved {output / "best.pt"} and {output / "last.pt"}', flush=True)
-    return output
+    print(f'Saved {results_dir / "best.pt"} and {run_dir / "last.pt"}', flush=True)
+    return results_dir
 
 
 def parse_config(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, help=f'YAML overrides (default: {DEFAULT_CONFIG})')
-    for key in ('model', 'data', 'output', 'device', 'backbone-weights'):
+    for key in ('model', 'data', 'device', 'backbone-weights'):
         parser.add_argument('--' + key)
     for key in ('epochs', 'batch', 'workers', 'cpu-threads', 'max-train-images', 'max-val-images', 'patience'):
         parser.add_argument('--' + key, type=int)
     parser.add_argument('--lr', type=float)
     parser.add_argument('--amp', action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument('--from-scratch', action='store_true', default=None)
-    parser.add_argument('--resume', type=Path)
+    experiment = parser.add_mutually_exclusive_group()
+    experiment.add_argument('--name', help='Experiment name; writes runs/NAME and results/NAME')
+    experiment.add_argument('--resume', type=Path, metavar='LAST_PT', help='Continue the experiment that owns runs/NAME/last.pt')
     parser.add_argument('--validate', type=Path, metavar='CHECKPOINT', help='Evaluate only')
     arguments = parser.parse_args(argv)
     with DEFAULT_CONFIG.open(encoding='utf-8') as stream:
@@ -242,16 +250,24 @@ def parse_config(argv=None):
     if checkpoint_path:
         previous = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
         config.update(previous.get('config', {}))
-        if arguments.resume:
-            if 'optimizer_state_dict' not in previous:
-                parser.error('--resume requires last.pt with optimizer state')
-            config['output'] = str(arguments.resume.resolve().parent)
+        # Older checkpoints carry an 'output' run directory; directories now follow 'name'.
+        config.pop('output', None)
+        if arguments.resume and 'optimizer_state_dict' not in previous:
+            parser.error('--resume requires last.pt with optimizer state')
     if arguments.config:
         with arguments.config.open(encoding='utf-8') as stream:
             config.update(yaml.safe_load(stream))
     for key, value in vars(arguments).items():
         if key not in ('config', 'resume', 'validate') and value is not None:
-            config[key] = value
+            # Command-line paths follow the working directory; YAML paths start at the repository root.
+            config[key] = str(Path(value).resolve()) if key in PATH_KEYS else value
+    if arguments.resume:
+        config['name'] = arguments.resume.resolve().parent.name
+    name = config.get('name')
+    if not isinstance(name, str) or name in ('', '.', '..') or Path(name).name != name:
+        parser.error(f'name must be a single directory name such as yolov8n_empty10, got {name!r}')
+    if not project_path(config['data']).is_file():
+        parser.error(f"data file not found: {config['data']}; pass --data DATA_YAML")
     for key in ('batch', 'cpu_threads', 'epochs', 'log_interval'):
         if config[key] < 1:
             parser.error(f'{key} must be positive')

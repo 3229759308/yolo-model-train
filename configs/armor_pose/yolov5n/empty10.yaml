@@ -1,9 +1,9 @@
 # Original YOLOv5n v7.0 backbone/neck + shared 4-color/9-class/4-point head.
 # Same data, optimizer and losses as the YOLOv8n empty10 experiment.
 model: yolov5n-armor-pose
-data: /workspace/datasets/armor_pose_custom_empty10/data.yaml
-output: /workspace/runs/armor_pose_custom/yolov5n_empty10
-backbone_weights: /workspace/weights/yolov5n.pt
+name: yolov5n_empty10
+data: data/datasets/armor_pose_custom_empty10/data.yaml
+backbone_weights: models/pretrained/yolov5n.pt
 from_scratch: false
 input_size:
 - 480

@@ -17,7 +17,7 @@ import ultralytics
 from ultralytics.nn.tasks import PoseModel, load_checkpoint
 
 
-DEFAULT_BACKBONE_WEIGHTS = settings.WEIGHTS_DIR / "yolov8n-pose.pt"
+DEFAULT_BACKBONE_WEIGHTS = settings.PRETRAINED_DIR / "yolov8n-pose.pt"
 
 
 class ArmorPoseModel(nn.Module):

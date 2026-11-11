@@ -236,7 +236,7 @@ def subsample_dataset(source: Path = DEFAULT_SOURCE, output: Path = DEFAULT_OUTP
                         'parent_manifest': str(source / 'split_manifest.json'),
                         'subsampling': {'keep_empty': keep_empty, 'seed': seed,
                                         'report': 'subsampling_report.json'}, 'images': new_entries}
-        (staging / 'data.yaml').write_text(yaml.safe_dump({**config, 'path': str(output)},
+        (staging / 'data.yaml').write_text(yaml.safe_dump({**config, 'path': '.'},
                                            sort_keys=False, allow_unicode=True), encoding='utf-8')
         for name, value in (('split_manifest.json', new_manifest), ('subsampling_report.json', report)):
             (staging / name).write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')

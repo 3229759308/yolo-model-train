@@ -1,9 +1,9 @@
 # Keep 10% of the original empty-label images; all positive images retained.
 # Preserve the original video-based train/val split; start a new custom-head training run.
 model: yolov8n-armor-pose
-data: /workspace/datasets/armor_pose_custom_empty10/data.yaml
-output: /workspace/runs/armor_pose_custom/train_empty10
-backbone_weights: /workspace/weights/yolov8n-pose.pt
+name: yolov8n_empty10
+data: data/datasets/armor_pose_custom_empty10/data.yaml
+backbone_weights: models/pretrained/yolov8n-pose.pt
 from_scratch: false
 input_size:
 - 480

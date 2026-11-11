@@ -2,7 +2,7 @@
 
 参考 `../bit-auto-label` 的四关键点工作流，使用独立的 PySide6 桌面窗口进行人工标注和 ONNX 预标注。颜色分支与装甲板类别分开保存，适配 YOLOv8n-Pose 骨干加自定义检测头。
 
-已接入工作区真实模型 `weights/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，随附配置默认加载它。该模型的实际输出为**网络输入坐标**，工具会还原成原图像素后供编辑和保存；这与最初描述的“模型直接输出原图坐标”不同，详见下方实测说明。
+已接入工作区真实模型 `models/teacher/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，随附配置默认加载它。该模型的实际输出为**网络输入坐标**，工具会还原成原图像素后供编辑和保存；这与最初描述的“模型直接输出原图坐标”不同，详见下方实测说明。
 
 ## 启动
 
@@ -10,7 +10,7 @@
 bash tools/armor_labeler/start.sh --images /workspace/data/raw_image/test
 ```
 
-不传 `--images` 时可在窗口内打开目录。`model_config.json` 中的 `model_path` 默认为 `../../weights/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，相对配置文件所在目录解析。也可指定标签目录及另一份自定义 ONNX：
+不传 `--images` 时可在窗口内打开目录。`model_config.json` 中的 `model_path` 默认为 `../../models/teacher/Infantry-v8n-fp16-20260726-D1.8w-B16.onnx`，相对配置文件所在目录解析。也可指定标签目录及另一份自定义 ONNX：
 
 ```bash
 bash tools/armor_labeler/start.sh \

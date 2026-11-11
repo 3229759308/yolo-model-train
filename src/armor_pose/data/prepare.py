@@ -29,10 +29,9 @@ from ..common.definitions import (
     CLASS_NAMES_EN, CLASS_NAMES_ZH, COLOR_NAMES_EN, COLOR_NAMES_ZH,
     FLIP_IDX, POINT_NAMES as _POINT_NAMES,
 )
-from ..settings import DATA_DIR, DATASETS_DIR
+from ..settings import DATASETS_DIR
 
 
-DEFAULT_EXPORT = DATA_DIR / 'raw_image_label_end/armor_export_20261023_071657_908993'
 DEFAULT_OUTPUT = DATASETS_DIR / 'armor_pose_custom'
 POINT_NAMES = list(_POINT_NAMES)
 COMBINED_NAMES = [f'{color}_{cls}' for color in COLOR_NAMES_EN for cls in CLASS_NAMES_EN]
@@ -255,8 +254,9 @@ def choose_val_groups(group_stats: dict[str, dict], val_ratio: float = .2, seed:
     return set(min(candidates, key=score))
 
 
-def dataset_yaml(output_dir: Path) -> dict:
-    return {'path': str(output_dir), 'train': 'images/train', 'val': 'images/val',
+def dataset_yaml() -> dict:
+    # ArmorPoseDataset resolves a relative path from data.yaml, so the dataset stays movable.
+    return {'path': '.', 'train': 'images/train', 'val': 'images/val',
             'label_format': 'custom-head-pixels', 'nc': 9, 'ncolor': 4, 'nkpt': 4,
             'names': dict(enumerate(CLASS_NAMES_EN)), 'color_names': dict(enumerate(COLOR_NAMES_EN)),
             'kpt_shape': [4, 2], 'point_names': POINT_NAMES, 'flip_idx': FLIP_IDX,
@@ -267,7 +267,7 @@ def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
 
 
-def prepare_dataset(export_dir: Path = DEFAULT_EXPORT, output_dir: Path = DEFAULT_OUTPUT, *,
+def prepare_dataset(export_dir: Path, output_dir: Path = DEFAULT_OUTPUT, *,
                     val_ratio: float = .2, seed: int = 42,
                     val_groups: Sequence[str] | None = None) -> dict:
     """Validate, convert, copy, and atomically publish a new training dataset."""
@@ -328,7 +328,7 @@ def prepare_dataset(export_dir: Path = DEFAULT_EXPORT, output_dir: Path = DEFAUL
                                          'source_image': str(entry.image), 'source_label': str(entry.label),
                                          'width': entry.width, 'height': entry.height,
                                          'objects': len(entry.rows), 'reviewed': entry.reviewed})
-        (staging / 'data.yaml').write_text(yaml.safe_dump(dataset_yaml(output_dir), sort_keys=False, allow_unicode=True), encoding='utf-8')
+        (staging / 'data.yaml').write_text(yaml.safe_dump(dataset_yaml(), sort_keys=False, allow_unicode=True), encoding='utf-8')
         _write_json(staging / 'preparation_report.json', report)
         _write_json(staging / 'split_manifest.json', {'source_export': str(export_dir),
                      'source_image_root': str(image_root), 'source_format': metadata['format'],
@@ -354,7 +354,7 @@ def prepare_dataset(export_dir: Path = DEFAULT_EXPORT, output_dir: Path = DEFAUL
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--export', type=Path, default=DEFAULT_EXPORT, help='armor_labeler export directory')
+    parser.add_argument('--export', type=Path, required=True, help='armor_labeler export directory, e.g. data/exports/<export>')
     parser.add_argument('--output', type=Path, default=DEFAULT_OUTPUT, help='new dataset directory; existing paths are refused')
     parser.add_argument('--val-ratio', type=float, default=.2)
     parser.add_argument('--seed', type=int, default=42)
